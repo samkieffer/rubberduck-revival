@@ -16,3 +16,4 @@ reference/
 !tests/fixtures/*.wav
 
 .DS_Store
+build-oracle/
