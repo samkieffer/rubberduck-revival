@@ -16,6 +16,8 @@ extern "C" {
 }
 
 #include "rd/LadderFilter.h"
+#include "rd/StateVariableFilter.h"
+#include "rd/Shaper.h"
 
 #define THISCALL __attribute__((thiscall))
 
@@ -127,6 +129,102 @@ bool testLadder()
     return report("ladder filter", compare(a, b), n);
 }
 
+bool testSvf(int mode)
+{
+    typedef void(THISCALL * Configure)(void*, int, int, float, float);
+    auto configure = fn<Configure>(0x40d5b0);
+    auto setFreq = fn<void(THISCALL*)(void*, float)>(0x40d5e0);
+    auto setDamp = fn<void(THISCALL*)(void*, float)>(0x40d600);
+    auto reset = fn<void(THISCALL*)(void*)>(0x40d620);
+    auto process = fn<void(THISCALL*)(void*, int16_t*, unsigned)>(0x40d7f0);
+
+    alignas(16) uint8_t orig[0x40] = {};
+    *reinterpret_cast<uint32_t*>(orig) = 0x435904;  // vtable, as set by ctor 0x40d590
+    configure(orig, mode, 22050, 2756.25f, 0.0f);
+    reset(orig);
+
+    rd::StateVariableFilter mine;
+    mine.configure(static_cast<rd::StateVariableFilter::Mode>(mode), 22050, 2756.25f, 0.0f);
+    mine.reset();
+
+    const unsigned n = 128 * 400;
+    std::vector<int16_t> a = testSignal(n, 777 + mode), b = a;
+    Lcg params(42 + mode);
+    for (unsigned blk = 0; blk < n / 128; ++blk) {
+        float hz = 60.0f + params.unit() * 3300.0f;
+        float damp = params.unit() * params.unit() * 0.6f;
+        setFreq(orig, hz);
+        setDamp(orig, damp);
+        mine.setFrequency(hz);
+        mine.setDamping(damp);
+        process(orig, &a[blk * 128], 128);
+        mine.process(&b[blk * 128], 128);
+    }
+    char name[64];
+    std::snprintf(name, sizeof name, "svf mode %d", mode);
+    return report(name, compare(a, b), n);
+}
+
+// The original pops a fourth, unused argument (ret 0x10).
+typedef void(THISCALL * ShaperConfigure)(void*, uint32_t, uint32_t, uint32_t, uint32_t);
+typedef void(THISCALL * ShaperProcess)(void*, int16_t*, unsigned);
+
+bool testShaperTables()
+{
+    auto ctor = fn<void(THISCALL*)(void*)>(0x410880);
+    auto configure = fn<ShaperConfigure>(0x4108b0);
+    alignas(16) static uint8_t orig[0x220];
+    ctor(orig);
+    rd::Shaper mine;
+    unsigned bad = 0, total = 0;
+    for (int mode = 0; mode < 4; ++mode)
+        for (int amount = 0; amount < 256; ++amount)
+            for (int ceiling = 0; ceiling < 256; ++ceiling) {
+                if (mode == 3 && amount > 0) break;  // mode 3 coefficients depend on `ceiling` only
+                configure(orig, mode, amount, ceiling, 0);
+                mine.configure(mode, amount, ceiling);
+                total++;
+                if (mode < 3) {
+                    if (std::memcmp(orig + 6, mine.table(), 257 * 2) != 0) bad++;
+                } else {
+                    // compare via processing a short signal (coefficients are private)
+                }
+            }
+    std::printf("%-28s %s  configurations=%u mismatches=%u\n", "shaper tables", bad ? "FAIL" : "OK  ", total, bad);
+    return bad == 0;
+}
+
+bool testShaper(int mode)
+{
+    auto ctor = fn<void(THISCALL*)(void*)>(0x410880);
+    auto configure = fn<ShaperConfigure>(0x4108b0);
+    auto process = fn<ShaperProcess>(0x410ad0);
+    alignas(16) static uint8_t orig[0x220];
+    ctor(orig);
+    rd::Shaper mine;
+
+    const unsigned n = 128 * 400;
+    std::vector<int16_t> a = testSignal(n, 555 + mode), b = a;
+    Lcg params(7 + mode);
+    std::vector<std::pair<int, int>> settings;
+    for (unsigned blk = 0; blk < n / 128; ++blk)
+        settings.push_back({static_cast<int>(params.next() >> 24), static_cast<int>(params.next() >> 24)});
+
+    rd_srand(12345);
+    for (unsigned blk = 0; blk < n / 128; ++blk) {
+        if (blk % 8 == 0) configure(orig, mode, settings[blk].first, settings[blk].second, 0);
+        process(orig, &a[blk * 128], 128);
+    }
+    rd_srand(12345);
+    for (unsigned blk = 0; blk < n / 128; ++blk) {
+        if (blk % 8 == 0) mine.configure(mode, settings[blk].first, settings[blk].second);
+        mine.process(&b[blk * 128], 128, rd_rand);
+    }
+    char name[64];
+    std::snprintf(name, sizeof name, "shaper mode %d", mode);
+    return report(name, compare(a, b), n);
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -135,11 +233,18 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "usage: oracle rdh3o.exe [test]\n");
         return 2;
     }
+    setvbuf(stdout, nullptr, _IONBF, 0);
     if (!rd_load(argv[1]))
         return 1;
     setFpuLikeOriginal();
     std::string only = argc > 2 ? argv[2] : "";
     bool ok = true;
     if (only.empty() || only == "ladder") ok &= testLadder();
+    for (int m = 0; m < 4; ++m)
+        if (only.empty() || only == "svf") ok &= testSvf(m);
+    if (only.empty() || only == "shaper") {
+        ok &= testShaperTables();
+        for (int m = 0; m < 4; ++m) ok &= testShaper(m);
+    }
     return ok ? 0 : 1;
 }

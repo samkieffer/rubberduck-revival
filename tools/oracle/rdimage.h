@@ -7,3 +7,4 @@
 
 int rd_load(const char *path);
 void rd_srand(unsigned seed);
+int __cdecl rd_rand(void);

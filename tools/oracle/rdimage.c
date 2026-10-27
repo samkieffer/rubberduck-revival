@@ -15,7 +15,7 @@ static unsigned rd_rand_state = 1;
 __attribute__((section(".rdimg"), used)) unsigned char rd_image_space[RD_IMAGE_SPAN] = {1};
 
 // MSVC CRT rand(): replaces the original so tests are deterministic.
-static int __cdecl rd_rand(void)
+int __cdecl rd_rand(void)
 {
     rd_rand_state = rd_rand_state * 214013u + 2531011u;
     return (int)((rd_rand_state >> 16) & 0x7fff);
