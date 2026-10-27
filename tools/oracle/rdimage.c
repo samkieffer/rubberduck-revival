@@ -23,7 +23,7 @@ int __cdecl rd_rand(void)
 
 void rd_srand(unsigned seed) { rd_rand_state = seed; }
 
-static void patch_jump(DWORD from, void *to)
+void rd_patch_jump(DWORD from, void *to)
 {
     BYTE *p = (BYTE *)from;
     p[0] = 0xE9;
@@ -81,7 +81,10 @@ int rd_load(const char *path)
     }
     free(file);
 
-    patch_jump(RD_ADDR_RAND, rd_rand);
+    rd_patch_jump(RD_ADDR_RAND, rd_rand);
+    // The original CRT heap is never initialised here: route malloc/free to ours.
+    rd_patch_jump(RD_ADDR_MALLOC, malloc);
+    rd_patch_jump(RD_ADDR_FREE, free);
     // MMX-available flag, normally set at startup from CPUID.
     typedef int (*cpu_fn)(void);
     *(int *)RD_ADDR_MMX_FLAG = ((cpu_fn)RD_ADDR_MMX_DETECT)();

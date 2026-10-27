@@ -24,6 +24,10 @@ public:
     // Original 0x40d7f0 and the four mode routines 0x40d630..0x40d750.
     void process(int16_t* buf, unsigned n);
 
+    float debugState(int i) const { return i == 0 ? band1 : i == 1 ? low1 : i == 2 ? band2 : low2; }
+    float debugF() const { return f; }
+    float debugQ() const { return q; }
+
 private:
     Mode mode = LowPass;
     int32_t rate = 44100;

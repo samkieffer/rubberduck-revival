@@ -21,6 +21,8 @@ public:
 
     const int16_t* table() const { return table_; }
 
+    float debugState(int i) const { return i == 0 ? s208_ : i == 1 ? s20c_ : s210_; }
+
 private:
     uint8_t mode_ = 0;
     uint8_t amount_ = 0;
