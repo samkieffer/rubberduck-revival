@@ -148,12 +148,57 @@ void Engine::render(int16_t* out, unsigned blocks)
         renderBlock(out + b * kBlockSize);
 
     const unsigned n = blocks * kBlockSize;
-    distortion.configure(3, static_cast<uint8_t>(params.distortionMix), static_cast<uint8_t>(params.distortionSmooth));
+    distortion.configure(3, static_cast<uint8_t>(params.distortionGain), static_cast<uint8_t>(params.distortionDrive));
     distortion.process(out, n, nullptr);
     delay.set(static_cast<uint32_t>(params.delayTime) << 2,
               static_cast<float>(static_cast<double>(params.delayGain) * 0.00390625),
               static_cast<float>(static_cast<double>(params.delayFeedback) * 0.00390625));
     delay.process(out, n);
+}
+
+uint32_t Engine::blockIncrement() const
+{
+    return static_cast<uint32_t>(ftol(static_cast<double>(kBlockMs) * 262144.0f * tempo * 1.66666669e-05f));
+}
+
+void Engine::triggerStep(const Step& s, uint32_t inc)
+{
+    if (s.note == -1) {
+        envStage = 4;
+    } else if (s.note != -2) {
+        targetNote = static_cast<uint8_t>(s.note);
+        if (s.slide == 0) {
+            voice1.note = static_cast<uint8_t>(s.note);
+            voice1.fine = 0;
+            envStage = 1;
+        }
+    }
+    if (s.accent == 0) {
+        envPeak = 0xa0;
+    } else {
+        envPeak = static_cast<uint8_t>((params.accent >> 1) - 0x80);
+        envStage = 1;
+    }
+    // Glide rate: covers the note distance within one step.
+    int32_t rate = (pitchDistance(voice1, targetNote) << 8) / static_cast<int32_t>(0x10000u / (inc ? inc : 1));
+    if (rate < 0)
+        rate = -rate;
+    slideRate = rate + 1;
+}
+
+void Engine::noteOn(int note, bool accent, bool slide)
+{
+    Step s;
+    s.note = static_cast<int8_t>(note < 0 ? 0 : (note > 120 ? 120 : note));
+    s.accent = accent ? 1 : 0;
+    s.slide = slide ? 1 : 0;
+    triggerStep(s, blockIncrement());
+}
+
+void Engine::noteOff()
+{
+    if (envStage != 0)
+        envStage = 4;
 }
 
 void Engine::renderBlock(int16_t* t0)
@@ -162,8 +207,7 @@ void Engine::renderBlock(int16_t* t0)
         applyOscTypes();
 
     // Sequencer: 2^16 per step, advanced once per block.
-    const uint32_t inc = static_cast<uint32_t>(
-        ftol(static_cast<double>(kBlockMs) * 262144.0f * tempo * 1.66666669e-05f));
+    const uint32_t inc = blockIncrement();
     if (running) {
         if ((pos >> 16) != (prevPos >> 16)) {
             step = static_cast<int>((pos >> 16) & 0xf);
@@ -177,27 +221,7 @@ void Engine::renderBlock(int16_t* t0)
                 if (p < kNumPatterns)
                     currentPattern = p;
             }
-            const Step& s = patterns[static_cast<size_t>(currentPattern)].steps[static_cast<size_t>(step)];
-            if (s.note == -1) {
-                envStage = 4;
-            } else if (s.note != -2) {
-                targetNote = static_cast<uint8_t>(s.note);
-                if (s.slide == 0) {
-                    voice1.note = static_cast<uint8_t>(s.note);
-                    voice1.fine = 0;
-                    envStage = 1;
-                }
-            }
-            if (s.accent == 0) {
-                envPeak = 0xa0;
-            } else {
-                envPeak = static_cast<uint8_t>((params.accent >> 1) - 0x80);
-                envStage = 1;
-            }
-            int32_t rate = (pitchDistance(voice1, targetNote) << 8) / static_cast<int32_t>(0x10000u / inc);
-            if (rate < 0)
-                rate = -rate;
-            slideRate = rate + 1;
+            triggerStep(patterns[static_cast<size_t>(currentPattern)].steps[static_cast<size_t>(step)], inc);
         }
         prevPos = pos;
         pos += inc;

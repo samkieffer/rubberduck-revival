@@ -1,0 +1,67 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'core/**'
+      - 'plugin/**'
+      - 'tools/rdcheck/**'
+      - 'tools/rdrender/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build.yml'
+
+jobs:
+  macos:
+    # Apple Silicon runner: builds AU/VST3/Standalone, checks bit-exactness on
+    # arm64 and validates the plug-ins.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRD_INSTALL_PLUGINS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Bit-exact engine (synthetic patterns, hashes from the original)
+        run: ./build/rdcheck tests/fixtures tests/fixtures/hashes.txt
+
+      - name: Validate the Audio Unit (auval)
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "build/plugin/RubberDuckRevival_artefacts/Release/AU/Rubber Duck Revival.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true
+          sleep 2
+          auval -v aumu Rdh3 Rdrv
+
+      - name: Validate the VST3 (pluginval)
+        run: |
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q pluginval.zip
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests --validate-in-process \
+            --validate "build/plugin/RubberDuckRevival_artefacts/Release/VST3/Rubber Duck Revival.vst3"
+
+      - name: Package
+        run: |
+          cd build/plugin/RubberDuckRevival_artefacts/Release
+          ditto -c -k --keepParent "AU/Rubber Duck Revival.component" "$GITHUB_WORKSPACE/RubberDuckRevival-AU.zip"
+          ditto -c -k --keepParent "VST3/Rubber Duck Revival.vst3" "$GITHUB_WORKSPACE/RubberDuckRevival-VST3.zip"
+          ditto -c -k --keepParent "Standalone/Rubber Duck Revival.app" "$GITHUB_WORKSPACE/RubberDuckRevival-App.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RubberDuckRevival-macOS
+          path: RubberDuckRevival-*.zip
+
+  linux:
+    # Engine only: quick bit-exactness check on x86-64.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRD_BUILD_PLUGIN=OFF
+      - run: cmake --build build -j 4
+      - run: ./build/rdcheck tests/fixtures tests/fixtures/hashes.txt

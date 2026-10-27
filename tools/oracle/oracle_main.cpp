@@ -315,8 +315,8 @@ struct OriginalSynth {
         at<int32_t>(params, 0x3c) = p.tweet;
         at<int32_t>(params, 0x40) = p.drive;
         at<int32_t>(params, 0x44) = p.squelch;
-        at<int32_t>(patmem, 0xdac) = p.distortionMix;
-        at<int32_t>(patmem, 0xdb0) = p.distortionSmooth;
+        at<int32_t>(patmem, 0xdac) = p.distortionGain;
+        at<int32_t>(patmem, 0xdb0) = p.distortionDrive;
         at<int32_t>(patmem, 0xdb4) = p.delayTime;
         at<int32_t>(patmem, 0xdb8) = p.delayGain;
         at<int32_t>(patmem, 0xdbc) = p.delayFeedback;
@@ -383,7 +383,7 @@ bool testEngine(const char* h30Path, const char* label, unsigned periods, unsign
             else if (k == "squelch") P.squelch = v; else if (k == "drive") P.drive = v;
             else if (k == "resonance") P.resonance = v; else if (k == "tweet") P.tweet = v;
             else if (k == "tweak") P.tweak = v; else if (k == "delayTime") P.delayTime = v;
-            else if (k == "distortionMix") P.distortionMix = v; else if (k == "cutoff") P.cutoff = v;
+            else if (k == "distortionGain") P.distortionGain = v; else if (k == "cutoff") P.cutoff = v;
             else std::printf("unknown key %s\n", k.c_str());
             if (comma == std::string::npos) break;
             at = comma + 1;
@@ -505,6 +505,8 @@ int main(int argc, char** argv)
         }
         rd::Engine shadow;
         file.applyTo(shadow);
+        if (argc > 6)
+            shadow.playMode = static_cast<rd::PlayMode>(std::atoi(argv[6]));
         OriginalSynth* orig = new OriginalSynth();
         orig->init(shadow);
         unsigned blocks = static_cast<unsigned>(std::atoi(argv[5]));
@@ -567,7 +569,7 @@ int main(int argc, char** argv)
                 case 13: P.tweet = r.next() % 2; break;
                 case 14: P.drive = r.next() % 256; break;
                 case 15: P.squelch = r.next() % 256; break;
-                case 16: P.distortionMix = r.next() % 256; P.distortionSmooth = r.next() % 256; break;
+                case 16: P.distortionGain = r.next() % 256; P.distortionDrive = r.next() % 256; break;
                 case 17: P.delayTime = r.next() % 256; break;
                 case 18: P.delayGain = r.next() % 256; P.delayFeedback = r.next() % 256; break;
                 case 19: P.volume = r.next() % 256; break;

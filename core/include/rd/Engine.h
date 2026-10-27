@@ -39,8 +39,8 @@ struct Params {
     int32_t drive = 0x40;         // id 15, +0x40
     int32_t squelch = 0x40;       // id 14, +0x44
     // Global effects (pattern memory +0xdac..+0xdbc).
-    int32_t distortionMix = 0;    // +0xdac (ends up holding "FX Distort Gain")
-    int32_t distortionSmooth = 0x80; // +0xdb0 (ends up holding "FX Distort Drive")
+    int32_t distortionGain = 0;   // id 22, +0xdac: wet amount
+    int32_t distortionDrive = 0x80; // id 21, +0xdb0: saturation (filter coefficient)
     int32_t delayTime = 0;        // id 18, +0xdb4 (x4 ms)
     int32_t delayGain = 0x80;     // id 19, +0xdb8
     int32_t delayFeedback = 0x80; // id 20, +0xdbc
@@ -89,7 +89,21 @@ public:
     void rewind();
     // Sequencer position: 2^20 per bar, 2^16 per step.
     uint32_t position() const { return pos; }
+    uint32_t previousPosition() const { return prevPos; }
     void setPosition(uint32_t p);
+    // Position for the next block, e.g. from the host transport. A new step
+    // or bar is detected against the previous block as usual.
+    void setNextPosition(uint32_t p) { pos = p; }
+    // Makes the next block treat its position as a new step and a new bar.
+    void forceTrigger() { prevPos = pos ^ 0xfff00000u; }
+    // Sequencer increment per block at the current tempo.
+    uint32_t blockIncrement() const;
+
+    // Live playing (bypassing the pattern sequencer), applied at the next block
+    // like the original's MIDI input. Notes use the pattern numbering
+    // (48 = "C-4" = MIDI 24); `slide` glides from the current pitch.
+    void noteOn(int note, bool accent, bool slide);
+    void noteOff();
 
     Random& random() { return rng; }
 
@@ -139,6 +153,7 @@ private:
     };
 
     void renderBlock(int16_t* out);
+    void triggerStep(const Step& s, uint32_t inc);
     void oscillator(int type, int32_t base, Voice& v, int16_t* buf);
     int32_t pitchDistance(const Voice& v, uint8_t target) const;
     void movePitch(Voice& v, int32_t amount);

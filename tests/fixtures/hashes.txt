@@ -1,0 +1,26 @@
+# FNV-1a 64 of the original rdh3o.exe voice output for the synthetic fixtures
+# (raw int16 LE, 3000 blocks; "|n" = play mode 0 single, 1 sequence, 2 shuffle).
+994f82fcf79aa8b2  synthetic_01.h30|1
+d7374c185c07a804  synthetic_02.h30|2
+00628d66b92307cc  synthetic_03.h30|0
+09c53abfcc01b947  synthetic_04.h30|1
+1731feaf13756f5f  synthetic_05.h30|2
+99a07cb75a6cae35  synthetic_06.h30|0
+614b07f6f632f160  synthetic_07.h30|1
+56981d51df6c1b86  synthetic_08.h30|2
+48c16d9f1824159e  synthetic_09.h30|0
+f716460b49d88a46  synthetic_10.h30|1
+2e795eedafd0e7bf  synthetic_11.h30|2
+83229f82b7d72bb0  synthetic_12.h30|0
+222ccba60159f26d  synthetic_13.h30|1
+7989f85d99becf5a  synthetic_14.h30|2
+132069288b8f418c  synthetic_15.h30|0
+9936570e517e16c6  synthetic_16.h30|1
+60e0b8c7952eed6b  synthetic_17.h30|2
+1c16425948b4ba17  synthetic_18.h30|0
+59ec2a0e3cf0d6d7  synthetic_19.h30|1
+b8913dd1c39962d0  synthetic_20.h30|2
+76a0ca36b1ef631f  synthetic_21.h30|0
+a9f22d9eaca48fe1  synthetic_22.h30|1
+32aa85916a830c5a  synthetic_23.h30|2
+c3ea72b600ab8f50  synthetic_24.h30|0

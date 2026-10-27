@@ -35,9 +35,16 @@ if(RD_BUILD_TOOLS)
 
     # Bit-exactness against the original. Needs the installer's content folder
     # (not in the repository): cmake -DRD_CONTENT_DIR=/path/to/content
-    set(RD_CONTENT_DIR "${CMAKE_SOURCE_DIR}/reference/content" CACHE PATH "Original pattern files")
     enable_testing()
-    add_test(NAME bit_exact COMMAND rdcheck "${RD_CONTENT_DIR}" "${CMAKE_SOURCE_DIR}/tests/reference_hashes.txt")
+    # Synthetic patterns shipped with the repository, hashes recorded from the original.
+    add_test(NAME bit_exact_fixtures
+             COMMAND rdcheck "${CMAKE_SOURCE_DIR}/tests/fixtures" "${CMAKE_SOURCE_DIR}/tests/fixtures/hashes.txt")
+    # The installer's own patterns (not in the repository): -DRD_CONTENT_DIR=/path/to/content
+    set(RD_CONTENT_DIR "${CMAKE_SOURCE_DIR}/reference/content" CACHE PATH "Original pattern files")
+    if(EXISTS "${RD_CONTENT_DIR}/Acid_was_my_first_love.h30")
+        add_test(NAME bit_exact_installer
+                 COMMAND rdcheck "${RD_CONTENT_DIR}" "${CMAKE_SOURCE_DIR}/tests/reference_hashes.txt")
+    endif()
 endif()
 
 if(RD_BUILD_PLUGIN)

@@ -48,7 +48,14 @@ int main(int argc, char** argv)
         if (line.empty() || line[0] == '#')
             continue;
         const uint64_t expected = std::stoull(line.substr(0, 16), nullptr, 16);
-        const std::string rel = line.substr(18);
+        std::string rel = line.substr(18);
+        // Optional play mode suffix: "<path>|<mode>".
+        int mode = 0;
+        const auto bar = rel.rfind('|');
+        if (bar != std::string::npos) {
+            mode = std::atoi(rel.c_str() + bar + 1);
+            rel = rel.substr(0, bar);
+        }
         rd::H30File file;
         if (!rd::H30File::load(dir + "/" + rel, file)) {
             missing++;
@@ -56,6 +63,7 @@ int main(int argc, char** argv)
         }
         rd::Engine engine;
         file.applyTo(engine);
+        engine.playMode = static_cast<rd::PlayMode>(mode);
         engine.setRunning(true);
         std::vector<int16_t> out(3000 * rd::kBlockSize);
         for (unsigned b = 0; b < 3000; b += 16)

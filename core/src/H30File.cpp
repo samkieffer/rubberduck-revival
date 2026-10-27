@@ -122,8 +122,8 @@ bool H30File::parse(const uint8_t* data, size_t size, H30File& f, std::string* e
     f.extra = r.i32();
     // The loader routes the first distortion field to "Drive" and the second to
     // "Gain", while the saver writes them the other way round.
-    p.distortionSmooth = r.i32();
-    p.distortionMix = r.i32();
+    p.distortionDrive = r.i32();
+    p.distortionGain = r.i32();
     p.delayTime = r.i32();
     p.delayGain = r.i32();
     p.delayFeedback = r.i32();
@@ -200,8 +200,8 @@ std::vector<uint8_t> H30File::serialize(const Engine& e, int tempoKnobValue) con
     writeI32(out, p.tweak);
     writeI32(out, p.tweet);
     writeI32(out, extra);
-    writeI32(out, p.distortionMix);
-    writeI32(out, p.distortionSmooth);
+    writeI32(out, p.distortionGain);
+    writeI32(out, p.distortionDrive);
     writeI32(out, p.delayTime);
     writeI32(out, p.delayGain);
     writeI32(out, p.delayFeedback);
