@@ -9,6 +9,7 @@ namespace rd {
 namespace {
 
 const char kSignature[] = "Rubber Duck H3O+ * D-LUSiON";
+const char kOldSignature[] = "RuBBeR DuCK Sequence * D-LUSiON";  // version 1 files (1996)
 
 class Reader
 {
@@ -61,8 +62,9 @@ bool H30File::parse(const uint8_t* data, size_t size, H30File& f, std::string* e
         return false;
     };
     Reader r(data, size);
-    if (r.str() != kSignature)
-        return fail("not a Rubber Duck H3O+ file");
+    const std::string signature = r.str();
+    if (signature != kSignature && signature != kOldSignature)
+        return fail("not a Rubber Duck file");
     f = H30File();
     f.version = r.i32();
 

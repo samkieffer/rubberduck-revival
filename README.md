@@ -13,18 +13,30 @@ tweak, tweet, delay, distorsion…), changement de pattern, synchro au tempo.
 
 | Étape | Statut |
 |---|---|
-| Analyse de l'exécutable d'origine (décompilation) | en cours |
-| Décodage du format de fichier `.h30` | à faire |
-| Banc de comparaison avec l'original (Wine) | à faire |
-| Moteur sonore C++ portable + rendu WAV | à faire |
-| Plugin AU / VST3 (JUCE) | à faire |
+| Analyse de l'exécutable d'origine (décompilation) | fait |
+| Décodage du format de fichier `.h30` (v1 à v4) | fait |
+| Banc de comparaison avec l'original (Wine) | fait |
+| Moteur sonore C++ portable + rendu WAV | fait — **identique au bit près à l'original** sur les 112 patterns fournis |
+| Plugin AU / VST3 (JUCE) | en cours |
 
 ## Organisation du dépôt
 
 - `docs/` : notes d'analyse du logiciel d'origine (format `.h30`, moteur sonore).
-- `core/` : moteur sonore en C++ pur, sans dépendance (à venir).
-- `tools/` : outils en ligne de commande (rendu d'un `.h30` en WAV, comparaison A/B) (à venir).
+- `core/` : moteur sonore en C++ pur, sans dépendance.
+- `tools/rdrender` : rendu d'un `.h30` en WAV.
+- `tools/rdcheck` : vérifie qu'une compilation reproduit l'original au bit près.
+- `tools/oracle` : banc de test qui exécute les routines de l'exécutable d'origine sous Wine.
 - `plugin/` : enveloppe JUCE pour AU / VST3 / Standalone (à venir).
+
+## Compiler et vérifier (Mac)
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRD_BUILD_PLUGIN=OFF \
+      -DRD_CONTENT_DIR=/chemin/vers/RubberDuck_H3O_2.12/content
+cmake --build build -j
+./build/rdrender "/chemin/vers/content/Acid_was_my_first_love.h30" acid.wav --bars 8
+(cd build && ctest --output-on-failure)   # contrôle bit à bit
+```
 
 ## Fichiers d'origine
 

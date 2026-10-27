@@ -495,6 +495,30 @@ int main(int argc, char** argv)
     if (only.empty() || only == "ladder") ok &= testLadder();
     for (int m = 0; m < 4; ++m)
         if (only.empty() || only == "svf") ok &= testSvf(m);
+    if (only == "dump") {
+        // dump <h30> <out.raw> <blocks>: original voice output, raw int16 mono.
+        rd::H30File file;
+        std::string err;
+        if (argc < 6 || !rd::H30File::load(argv[3], file, &err)) {
+            std::fprintf(stderr, "dump: %s\n", err.c_str());
+            return 1;
+        }
+        rd::Engine shadow;
+        file.applyTo(shadow);
+        OriginalSynth* orig = new OriginalSynth();
+        orig->init(shadow);
+        unsigned blocks = static_cast<unsigned>(std::atoi(argv[5]));
+        std::vector<int16_t> a(blocks * 128);
+        rd_srand(1);
+        for (unsigned b = 0; b < blocks; b += 16) {
+            unsigned n = blocks - b < 16 ? blocks - b : 16;
+            orig->render(&a[b * 128], n);
+        }
+        FILE* f = std::fopen(argv[4], "wb");
+        std::fwrite(a.data(), 2, a.size(), f);
+        std::fclose(f);
+        return 0;
+    }
     if (only == "allfiles") {
         // Every pattern file in a directory, 1000 blocks each, 8 blocks per period.
         const char* dir = argc > 3 ? argv[3] : "reference/content";

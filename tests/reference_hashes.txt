@@ -1,0 +1,114 @@
+# FNV-1a 64 of the original rdh3o.exe voice output (raw int16 LE, 3000 blocks,
+# rendered by tools/oracle). Paths are relative to the installer content folder.
+8f3f5d4c674464bc  ---!!!!DJ-99!!!!---.H30
+cef6b200c6a14323  80'$$$.h30
+a387b79be3a3bbca  Acid_was_my_first_love.h30
+daf7cc4ae308f5db  Blast1.h30
+c927a8501e72b62b  Blast2.h30
+5f90b82916d32b82  Blast3.h30
+431fe40c658be2aa  CANON1.H30
+7192d5a3050895ac  Commerda$$$.h30
+245ee18bc81fd6ef  CuE_CHEA.H30
+d2af9d20581726a2  CuE_CuBi.h30
+8394d39f40d9199d  CuE_OnTh.H30
+1f95c34235f8c9ab  DJSeemoD-Lay$$$.h30
+760971c5fd9f2f50  GBgroove.H30
+1d9ca889d6ac3e21  GOALINE1.H30
+df7c2bbfe598aba8  GOALINE2.H30
+e2e9fc9210a11907  GOALINE5.H30
+892b5185dee47478  Loop1.h30
+a1a88edffca9f314  MYSTIQUE.H30
+bc3ccbef07cf09ae  Mello7.h30
+cd156803fd9d8332  MoonPatrol_RD1.h30
+8f127686b14efce7  MoonPatrol_RD2.h30
+0bff3d99d5905106  Muskote1.h30
+a2d11a2caeded430  Muskote1Vari1.h30
+442ba36312dcf46e  Muskote1Vari2.h30
+ea47dd2617c466bf  Muskote1Vari3.h30
+9102c22c1e0de593  Muskote2.h30
+9201883e347cc736  NEWTRY.H30
+ccb2f7b791287079  OBastard.h30
+ff55e3852eb6f25b  PVC.H30
+c3fda343cdce9935  Paradise303.h30
+c3fda343cdce9935  Paradise3031.h30
+85773195aa4860c2  Plastic-A.H30
+efc7082a755e58ae  Plastic-H.H30
+d801b66d67bb3ba7  Plastic.H30
+cc4ac3300ba7b0d2  Processing.H30
+24a941ac0ee6da9c  RD-Bass1.h30
+7c224f39f29d9842  RD-Bass2.h30
+e9e98a490308cc83  RD-Bass3.h30
+138326bbdc526803  RD-Tune1.h30
+b27718cfb47938a9  RD-Tune1X.H30
+5163c24b2c96895f  RD-Tune2.h30
+16150d289495aa27  RD-Tune3.H30
+dd0b09e56aa7251a  RD-Tune4.H30
+74ad39c82dcf1731  RD-Tune5.H30
+e7bf5d1fbb226e5d  RD-Tune6.H30
+d38796261132f6ba  Realms.h30
+0fc2b21dd375cf0b  STRANGE2.H30
+763b74665edcf233  Sadness.h30
+1ac68472e5f723d7  Sin-patica$$$.h30
+ab503d1026009950  Startup.h30
+b603423be48edcc5  Strange.h30
+a5d01b2ec029971f  TOOFUNKY.H30
+827f18f3cbd52e77  TRANCE.H30
+f818affeda222b90  TSB01.H30
+f818affeda222b90  TSB011.H30
+8509bdb5035c5e7d  Thinking.h30
+ca582aeeebe1c0eb  ToofunkyX.H30
+5a4c7e84da5878cf  Trancefiguration.H30
+9f5ee03f0599c317  VIV-EERI.H30
+724f8465e33a5e0a  WOOPASS.H30
+2923aefd11519e58  ZAP.H30
+9ad10d86464edddf  brave.h30
+4ac6633fa6f9684a  d-lusion.H30
+a851e433e69bcec0  funky.h30
+007bd4192ec183ce  machine.h30
+3d4a61b7ce99a08f  mockery.H30
+0bff3d99d5905106  stream.h30
+9102c22c1e0de593  stream2.h30
+c203cba821697917  stream3.h30
+287b9387e58b4459  yaybass2.H30
+b9cd29e9e780fa20  CuBiCO Collection/CuE_2Funkee.H30
+788e9827d4a0f8cc  CuBiCO Collection/CuE_Arse1.H30
+fe316d9dd8d08693  CuBiCO Collection/CuE_Arse1X.H30
+63c0f2b014398d97  CuBiCO Collection/CuE_Arse2.H30
+cd4d2bd16acdec7c  CuBiCO Collection/CuE_Arse3.H30
+fe316d9dd8d08693  CuBiCO Collection/CuE_ArseHole.H30
+085f24e7c666ce4b  CuBiCO Collection/CuE_BassBustard'z.h30
+de0011b2e0154817  CuBiCO Collection/CuE_BeastieBeat.H30
+ba481cd7b3ccdb4a  CuBiCO Collection/CuE_BoMbDroppiN.H30
+245ee18bc81fd6ef  CuBiCO Collection/CuE_CHEAP.H30
+d2af9d20581726a2  CuBiCO Collection/CuE_CuBiCo.h30
+0c97db978363c6c6  CuBiCO Collection/CuE_DoubleEcho.H30
+461c71591be09449  CuBiCO Collection/CuE_DoubleEchoX.H30
+2cf8586ec2f527cc  CuBiCO Collection/CuE_DoubleEchoY.H30
+ddd124a472c3bf50  CuBiCO Collection/CuE_Drama.H30
+958b3c7ec6ed1faf  CuBiCO Collection/CuE_HiGH.H30
+e49ccaf8d15d5f56  CuBiCO Collection/CuE_LazerBass1.H30
+990e83500558d9dc  CuBiCO Collection/CuE_LazerBass2.H30
+b599eca68b998608  CuBiCO Collection/CuE_LazerBass3.H30
+5cf8cd2c06921e88  CuBiCO Collection/CuE_LazerBass4.H30
+14922e8d5b958242  CuBiCO Collection/CuE_LazerBass5.H30
+63c0f2b014398d97  CuBiCO Collection/CuE_MadSong.H30
+7b059bb39965c089  CuBiCO Collection/CuE_Mystique.h30
+5b369bb648b9dee8  CuBiCO Collection/CuE_MystiqueX.h30
+580578b578fb8558  CuBiCO Collection/CuE_OldSynth.H30
+451dbbed580cabce  CuBiCO Collection/CuE_OldSynth2.H30
+6a2fc0ab4cc968d3  CuBiCO Collection/CuE_OldSynth2X.H30
+15d21832d0b22bf9  CuBiCO Collection/CuE_OldSynth3.H30
+2e35f14d328fba2f  CuBiCO Collection/CuE_OldSynth3X.H30
+5a92123978eec48a  CuBiCO Collection/CuE_OldSynth4.H30
+6fc3d48e0cff6c3d  CuBiCO Collection/CuE_OldSynth4X.H30
+af4e3c3ed94a681f  CuBiCO Collection/CuE_OnTheRun.H30
+1f47c1f0f6abf10c  CuBiCO Collection/CuE_Originz.h30
+9b5de16761c37f0a  CuBiCO Collection/CuE_QuickN.H30
+32ccc0b18335b1f6  CuBiCO Collection/CuE_RePeAtEd.h30
+4e2d087475139c9f  CuBiCO Collection/CuE_SQUARE.H30
+bf485e7ee3da8a31  CuBiCO Collection/CuE_Understand.h30
+319bf770a07ed848  CuBiCO Collection/CuE_Weird1.h30
+cf706bd2b1f3be3e  CuBiCO Collection/CuE_Weird2.h30
+41d57f47d938b0fe  CuBiCO Collection/CuE_Weird2X.h30
+8e2954e347194bd9  CuBiCO Collection/CuE_Weird2Y.h30
+8154f2f0a57ee54b  CuBiCO Collection/CuE_Weird2YX.h30
