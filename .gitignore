@@ -1,0 +1,18 @@
+# Build output
+build/
+build-*/
+cmake-build-*/
+*.component
+*.vst3
+*.app
+
+# Original d-lusion material stays local (copyrighted): put it in reference/
+reference/
+*.exe
+*.dll
+
+# Generated audio
+*.wav
+!tests/fixtures/*.wav
+
+.DS_Store
