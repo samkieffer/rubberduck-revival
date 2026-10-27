@@ -34,6 +34,11 @@ La compilation télécharge JUCE puis copie automatiquement le plugin dans
 `~/Library/Audio/Plug-Ins/Components` (AU) et `~/Library/Audio/Plug-Ins/VST3` (VST3).
 L'appli autonome se trouve dans `build/plugin/RubberDuckRevival_artefacts/Release/Standalone/`.
 
+Sans compiler : chaque build de la CI GitHub (onglet *Actions*, artefact
+`RubberDuckRevival-macOS`) contient l'AU, le VST3 et l'appli. Après décompression,
+retirer la quarantaine de macOS avant de copier les plugins :
+`xattr -dr com.apple.quarantine "Rubber Duck Revival.component" "Rubber Duck Revival.vst3"`.
+
 Dans Ableton Live : Réglages → Plug-ins → activer « Use Audio Units v2 » et/ou
 « Use VST3 Plug-in System Folders », puis « Rescan ». Le plugin apparaît sous
 *Rubber Duck Revival* comme instrument.
