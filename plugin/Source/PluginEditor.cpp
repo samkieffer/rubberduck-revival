@@ -9,9 +9,10 @@ const juce::Colour kPanel(0xff1f2228);
 const juce::Colour kText(0xffe6e6e6);
 const juce::Colour kDim(0xff8a8f99);
 const juce::Colour kAcid(0xffffb000);
+const juce::Colour kOff(0xff3c4049);  // controls the selected engine does not have
 
 constexpr int kWidth = 1000;
-constexpr int kHeight = 600;
+constexpr int kHeight = 634;  // with a single row of steps
 
 } // namespace
 
@@ -54,6 +55,8 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     addChoice("playmode", "Play mode");
     addChoice("source", "Source");
     addChoice("quantize", "Pattern change");
+    addToggle("length32", "32 steps").button.setTooltip("Play each pattern with the next one (0+1, 2+3...) as one "
+                                                        "32-step pattern, in Single mode");
 
     static const char* names[16] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"};
     for (int i = 0; i < rd::kNumPatterns; ++i) {
@@ -69,13 +72,45 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
         *patternParam, [this](float value) { stepEditor.setPatternIndex(static_cast<int>(value) - 1); });
     patternAttachment->sendInitialUpdate();
 
+    shiftLeft.onClick = [this] { stepEditor.shiftSteps(-1); };
+    shiftRight.onClick = [this] { stepEditor.shiftSteps(1); };
+    octaveDown.onClick = [this] { stepEditor.transpose(-12); };
+    semitoneDown.onClick = [this] { stepEditor.transpose(-1); };
+    semitoneUp.onClick = [this] { stepEditor.transpose(1); };
+    octaveUp.onClick = [this] { stepEditor.transpose(12); };
+    undoButton.onClick = [this] { stepEditor.undo(); };
+    redoButton.onClick = [this] { stepEditor.redo(); };
+    copyButton.onClick = [this] { stepEditor.copy(); };
+    pasteButton.onClick = [this] { stepEditor.paste(); };
+    entryOctaveDown.onClick = [this] { stepEditor.setEntryOctave(stepEditor.getEntryOctave() - 1); };
+    entryOctaveUp.onClick = [this] { stepEditor.setEntryOctave(stepEditor.getEntryOctave() + 1); };
+    shiftLeft.setTooltip("Shift the steps left (Shift+Left)");
+    shiftRight.setTooltip("Shift the steps right (Shift+Right)");
+    octaveDown.setTooltip("Transpose an octave down (Option+Down)");
+    semitoneDown.setTooltip("Transpose a semitone down (Shift+Down)");
+    semitoneUp.setTooltip("Transpose a semitone up (Shift+Up)");
+    octaveUp.setTooltip("Transpose an octave up (Option+Up)");
+    undoButton.setTooltip("Undo (Cmd+Z)");
+    redoButton.setTooltip("Redo (Cmd+Shift+Z)");
+    copyButton.setTooltip("Copy the shown pattern(s) (Cmd+C)");
+    pasteButton.setTooltip("Paste (Cmd+V)");
+    entryOctaveLabel.setJustificationType(juce::Justification::centred);
+    entryOctaveLabel.setColour(juce::Label::textColourId, kText);
+    entryOctaveLabel.setTooltip("Octave of the lower row of note keys");
+    for (auto* b : {&shiftLeft, &shiftRight, &octaveDown, &semitoneDown, &semitoneUp, &octaveUp, &undoButton, &redoButton,
+                    &copyButton, &pasteButton, &entryOctaveDown, &entryOctaveUp}) {
+        b->setWantsKeyboardFocus(false);
+        addAndMakeVisible(*b);
+    }
+    addAndMakeVisible(entryOctaveLabel);
+
     loadButton.onClick = [this] { loadFile(); };
     saveButton.onClick = [this] { saveFile(); };
     addAndMakeVisible(loadButton);
     addAndMakeVisible(saveButton);
     addAndMakeVisible(stepEditor);
 
-    setSize(kWidth, kHeight);
+    setSize(kWidth, editorHeight());
     startTimerHz(20);
 }
 
@@ -128,8 +163,16 @@ RubberDuckEditor::Choice& RubberDuckEditor::addChoice(const char* paramId, const
     return *choices.back();
 }
 
+int RubberDuckEditor::editorHeight() const
+{
+    return kHeight + StepEditor::heightFor(stepEditor.numRows()) - StepEditor::heightFor(1);
+}
+
 void RubberDuckEditor::selectPattern(int index)
 {
+    // In 32-step mode a pair is selected by its first pattern.
+    if (processor.pairMode())
+        index &= ~1;
     patternAttachment->setValueAsCompleteGesture(static_cast<float>(index + 1));
 }
 
@@ -168,15 +211,26 @@ void RubberDuckEditor::updateEngineControls()
     // v1.02 has no Squelch/Drive filter branch, no triangle and 14 patterns;
     // its sequence modes play a pattern range instead of the song.
     const bool v1 = processor.getEngineKind() == RubberDuckProcessor::EngineKind::V102;
+    // Disabled controls lose their acid colour so they read as absent, not just dimmed.
     auto enable = [this](const char* id, bool on) {
         for (auto& k : knobs)
             if (k->slider.getComponentID() == id) {
                 k->slider.setEnabled(on);
                 k->label.setEnabled(on);
+                for (auto colour : {juce::Slider::rotarySliderFillColourId, juce::Slider::thumbColourId})
+                    if (on)
+                        k->slider.removeColour(colour);
+                    else
+                        k->slider.setColour(colour, kOff);
             }
         for (auto& t : toggles)
-            if (t->button.getComponentID() == id)
+            if (t->button.getComponentID() == id) {
                 t->button.setEnabled(on);
+                if (on)
+                    t->button.removeColour(juce::TextButton::buttonOnColourId);
+                else
+                    t->button.setColour(juce::TextButton::buttonOnColourId, kOff);
+            }
         for (auto& c : choices)
             if (c->box.getComponentID() == id) {
                 c->box.setEnabled(on);
@@ -185,8 +239,10 @@ void RubberDuckEditor::updateEngineControls()
     };
     for (const char* id : {"squelch", "drive", "modification", "tweak", "tweet"})
         enable(id, !v1);
+    // The range is only played by the v1.02 Sequence and Random modes.
+    const bool single = processor.apvts.getRawParameterValue("playmode")->load() < 0.5f;
     for (const char* id : {"rangestart", "rangeend"})
-        enable(id, v1);
+        enable(id, v1 && !single);
     for (auto& c : choices)
         if (c->box.getComponentID() == "osc1")
             c->box.setItemEnabled(1, !v1);
@@ -198,18 +254,31 @@ void RubberDuckEditor::updateEngineControls()
 void RubberDuckEditor::timerCallback()
 {
     const int engineKind = static_cast<int>(processor.getEngineKind());
-    if (engineKind != shownEngine) {
+    const int playMode = static_cast<int>(std::lround(processor.apvts.getRawParameterValue("playmode")->load()));
+    if (engineKind != shownEngine || playMode != shownPlayMode) {
         shownEngine = engineKind;
+        shownPlayMode = playMode;
         updateEngineControls();
     }
+    const int rows = stepEditor.numRows();
+    const bool rowsChanged = rows != shownRows;
+    if (rowsChanged) {
+        shownRows = rows;
+        setSize(kWidth, editorHeight());
+    }
+    undoButton.setEnabled(stepEditor.canUndo());
+    redoButton.setEnabled(stepEditor.canRedo());
+    pasteButton.setEnabled(stepEditor.canPaste());
+    entryOctaveLabel.setText("Oct " + juce::String(stepEditor.getEntryOctave()), juce::dontSendNotification);
+
     const int selected = stepEditor.getPatternIndex();
     const int playing = processor.isSequencerRunning() ? processor.getPlayingPattern() : -1;
-    if (selected != shownPattern || playing != shownPlaying) {
+    if (selected != shownPattern || playing != shownPlaying || rowsChanged) {
         shownPattern = selected;
         shownPlaying = playing;
         for (int i = 0; i < rd::kNumPatterns; ++i) {
             auto& b = patternButtons[static_cast<size_t>(i)];
-            b.setToggleState(i == selected, juce::dontSendNotification);
+            b.setToggleState(rows == 2 ? (i & ~1) == (selected & ~1) : i == selected, juce::dontSendNotification);
             b.setColour(juce::TextButton::buttonColourId, i == playing && i != selected ? kAcid.withAlpha(0.35f) : kPanel);
         }
     }
@@ -226,8 +295,9 @@ void RubberDuckEditor::paint(juce::Graphics& g)
     g.drawText("revival", 168, 12, 100, 26, juce::Justification::centredLeft);
     g.setColour(kDim);
     g.setFont(juce::FontOptions(12.0f));
-    g.drawText(processor.getEngineKind() == RubberDuckProcessor::EngineKind::V102 ? "1997 engine" : "2000 engine", 168, 30,
-               100, 14, juce::Justification::centredLeft);
+    g.drawText(juce::String(processor.getEngineKind() == RubberDuckProcessor::EngineKind::V102 ? "1997 engine" : "2000 engine")
+                   + "  v" JucePlugin_VersionString,
+               168, 30, 120, 14, juce::Justification::centredLeft);
 
     for (const auto& s : sections) {
         g.setColour(kPanel);
@@ -236,6 +306,10 @@ void RubberDuckEditor::paint(juce::Graphics& g)
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(s.title, s.bounds.reduced(10, 4).removeFromTop(14), juce::Justification::topLeft);
     }
+    g.setColour(kDim);
+    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    for (const auto& c : captions)
+        g.drawText(c.title, c.bounds, juce::Justification::centredRight);
 }
 
 void RubberDuckEditor::layoutKnobs(juce::Rectangle<int> area, std::initializer_list<juce::Component*> items)
@@ -288,7 +362,29 @@ void RubberDuckEditor::resized()
         b.setBounds(patternRow.removeFromLeft(bw).reduced(2, 0));
 
     area.removeFromTop(6);
-    stepEditor.setBounds(area.removeFromTop(120));
+    {
+        captions.clear();
+        auto bar = area.removeFromTop(26);
+        auto group = [&](const char* title, int titleWidth, std::initializer_list<juce::Component*> items, int itemWidth) {
+            captions.push_back({title, bar.removeFromLeft(titleWidth).withTrimmedRight(6)});
+            for (auto* c : items)
+                c->setBounds(bar.removeFromLeft(itemWidth).reduced(2, 0));
+            bar.removeFromLeft(14);
+        };
+        group("SHIFT", 44, {&shiftLeft, &shiftRight}, 34);
+        group("TRANSPOSE", 74, {&octaveDown, &semitoneDown, &semitoneUp, &octaveUp}, 40);
+        group("EDIT", 40, {&undoButton, &redoButton, &copyButton, &pasteButton}, 56);
+        if (auto* length = find("length32"))
+            length->setBounds(bar.removeFromRight(86).reduced(2, 0));
+        bar.removeFromRight(14);
+        entryOctaveUp.setBounds(bar.removeFromRight(28).reduced(2, 0));
+        entryOctaveLabel.setBounds(bar.removeFromRight(52));
+        entryOctaveDown.setBounds(bar.removeFromRight(28).reduced(2, 0));
+        captions.push_back({"KEYS", bar.removeFromRight(46).withTrimmedRight(6)});
+    }
+
+    area.removeFromTop(8);
+    stepEditor.setBounds(area.removeFromTop(StepEditor::heightFor(stepEditor.numRows()) + 8));
     area.removeFromTop(10);
 
     sections.clear();

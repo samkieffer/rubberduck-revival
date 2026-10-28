@@ -84,9 +84,28 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
 - **Éditeur de pas** : glisser verticalement ou molette sur une note pour la changer,
   double-clic pour silence/note, clic droit pour « Note off », octave, effacer ;
   `AC` = accent, `SL` = slide.
+- **Saisie au clavier** (façon tracker) : cliquer une note pour y placer le curseur, puis
+  taper. Les touches sont prises à leur *position* (même place en AZERTY et en QWERTY) :
+  rangée du bas (Z S X D C V G B N H J M en QWERTY, W S X D C V G B N H J , en AZERTY)
+  = octave choisie par *Keys Oct*, rangée du haut (Q 2 W 3 E… / A é Z " E…) = octave
+  au-dessus. Touche 1 (`&`) = note off, Retour arrière = silence, A (`Q` en AZERTY) =
+  accent, F = slide, flèches = déplacer le curseur. L'infobulle de la grille rappelle les
+  touches de la disposition active. Dans Live, désactiver le clavier MIDI de l'ordinateur
+  (touche M) si des touches n'arrivent pas au plugin.
+- **Outils de séquence** (pattern affiché, ou les deux en 32 pas) : *Shift* ← → décale
+  tous les pas d'un cran en boucle (⇧← ⇧→), *Transpose* −12 −1 +1 +12 (⇧↑ ⇧↓ pour le
+  demi-ton, ⌥↑ ⌥↓ pour l'octave ; refusé si une note sortait de la tessiture),
+  *Undo* / *Redo* (⌘Z, ⇧⌘Z), *Copy* / *Paste* (⌘C, ⌘V, aussi d'une instance à l'autre).
+- **32 pas** : en mode *Single*, le pattern choisi est joué avec son voisin (0+1, 2+3…),
+  un par mesure, calé sur les mesures impaires/paires de Live ; les deux sont affichés
+  l'un sous l'autre. Les fichiers `.h30` restent au format d'origine (deux patterns) et
+  le son est identique à celui de l'original jouant ces deux patterns à la suite.
 - **Fichiers** : *Load .h30* charge une sauvegarde de l'original (patterns + réglages)
   et choisit le moteur qui l'a écrite (fichiers de version 1–2 : v1.02, versions 3–4 :
-  v2.12). *Save .h30* écrit un fichier relisible par l'original du moteur choisi.
+  v2.12). Pendant la lecture, le plugin passe aussitôt au pattern de départ du fichier,
+  sans attendre la mesure. *Save .h30* écrit un fichier relisible par l'original du
+  moteur choisi.
+- **Version** : affichée sous le titre (`v0.2.0`…), pour savoir quelle compilation Live a chargée.
 - **Fréquence d'échantillonnage** : exacte à 44,1 kHz. À 48 kHz ou plus, le signal est
   rééchantillonné (latence de quelques échantillons, compensée par Live).
 

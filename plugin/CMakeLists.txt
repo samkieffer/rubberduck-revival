@@ -33,7 +33,7 @@ juce_add_plugin(RubberDuckRevival
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS TRUE
     COPY_PLUGIN_AFTER_BUILD ${RD_INSTALL_PLUGINS}
     AU_MAIN_TYPE kAudioUnitType_MusicDevice
     VST3_CATEGORIES Instrument Synth
@@ -42,7 +42,8 @@ juce_add_plugin(RubberDuckRevival
 target_sources(RubberDuckRevival PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
-    Source/StepEditor.cpp)
+    Source/StepEditor.cpp
+    Source/KeyLayout.cpp)
 
 target_compile_definitions(RubberDuckRevival PUBLIC
     JUCE_WEB_BROWSER=0
@@ -57,11 +58,16 @@ target_link_libraries(RubberDuckRevival
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
+if(APPLE)
+    # Keyboard layout lookup for the tracker-style note entry (KeyLayout.cpp).
+    target_link_libraries(RubberDuckRevival PRIVATE "-framework Carbon")
+endif()
 
 # Headless processor tests (simulated host transport).
 juce_add_console_app(RubberDuckPluginTests PRODUCT_NAME "RubberDuckPluginTests")
 target_sources(RubberDuckPluginTests PRIVATE ${CMAKE_SOURCE_DIR}/tests/PluginTests.cpp)
-target_compile_definitions(RubberDuckPluginTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+# Modal loops: the editor tests pump the message loop so the editor's timers run.
+target_compile_definitions(RubberDuckPluginTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(RubberDuckPluginTests PRIVATE RubberDuckRevival rdcore juce::juce_audio_processors
     juce::juce_recommended_config_flags)
 if(RD_BUILD_TOOLS AND EXISTS "${RD_CONTENT_DIR}/Acid_was_my_first_love.h30")

@@ -89,6 +89,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RubberDuckProcessor::createL
     const StringArray v1Patterns{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D"};
     choice("rangestart", "Range From (v1.02)", v1Patterns, 0);
     choice("rangeend", "Range To (v1.02)", v1Patterns, 0);
+    toggle("length32", "32-Step Patterns", false);
     return {p.begin(), p.end()};
 }
 
@@ -126,6 +127,7 @@ RubberDuckProcessor::RubberDuckProcessor()
     pEngine = raw("engine");
     pRangeStart = raw("rangestart");
     pRangeEnd = raw("rangeend");
+    pLength32 = raw("length32");
 
     sequence = defaultSequence();
     readParameters();
@@ -257,6 +259,29 @@ void RubberDuckProcessor::handleMidi(const juce::MidiMessage& m)
     }
 }
 
+int RubberDuckProcessor::patternFor(int index, bool positioned, uint32_t bar) const
+{
+    if (!pairMode() || paramInt(pPlayMode) != 0)
+        return index;
+    return (index & ~1) + (positioned ? static_cast<int>(bar & 1) : 0);
+}
+
+void RubberDuckProcessor::applyPattern(int index, bool barStart, uint32_t target)
+{
+    if (!v1Active) {
+        engine.selectPattern(index);
+        return;
+    }
+    engineV1.selectPattern(index);
+    if (barStart && engineV1.isRunning()) {
+        // The block was set up to cross the end of the previous pattern, where
+        // Sequence and Random modes advance by themselves. Start it on step 0
+        // of the selected pattern instead (same samples as the natural wrap).
+        engineV1.forceTrigger();
+        engineV1.setNextPosition(target);
+    }
+}
+
 bool RubberDuckProcessor::hostPosition(int64_t blockHostTime, int64_t bufferStart, double ppqAtBufferStart, double bpm,
                                        uint32_t& position) const
 {
@@ -304,10 +329,11 @@ void RubberDuckProcessor::renderEngineBlock(int64_t blockHostTime, int64_t buffe
         patternChangePending = true;
     }
 
-    bool newBar = false, newStep = false;
+    bool newBar = false, newStep = false, positioned = false;
     uint32_t target = 0;
     const bool sequencing = static_cast<Source>(paramInt(pSource)) == Source::Patterns && hostPlaying;
     if (sequencing && hostPosition(blockHostTime, bufferStart, ppqAtBufferStart, bpm, target)) {
+        positioned = true;
         if (v1Active) {
             if (startPending || !engineV1.isRunning()) {
                 engineV1.forceTrigger();
@@ -333,17 +359,32 @@ void RubberDuckProcessor::renderEngineBlock(int64_t blockHostTime, int64_t buffe
     }
 
     const bool running = v1Active ? engineV1.isRunning() : engine.isRunning();
-    if (patternChangePending) {
+    const uint32_t bar = target >> 20;
+    bool applied = false;
+    if (loadPending.load() && !sequenceDirty.load()) {
+        // A .h30 was just loaded: play its pattern now. Waiting for the next bar
+        // would finish the bar with the new file's pattern at the old index.
+        loadPending.store(false);
+        desiredPattern = lastPatternParam = paramInt(pPattern) - 1;
+        patternChangePending = false;
+        activePattern = desiredPattern;
+        int start = patternFor(activePattern, positioned, bar);
+        if (!v1Active && positioned && engine.playMode == rd::PlayMode::Sequence)
+            start = engine.song[static_cast<size_t>(bar % static_cast<uint32_t>(engine.songLength)) % rd::kSongLength];
+        applyPattern(start, newBar, target);
+        applied = true;
+    } else if (patternChangePending) {
         const auto q = static_cast<Quantize>(paramInt(pQuantize));
         if (q == Quantize::Immediate || !running || (q == Quantize::NextBar && newBar)
             || (q == Quantize::NextStep && newStep)) {
-            if (v1Active)
-                engineV1.selectPattern(desiredPattern);
-            else
-                engine.selectPattern(desiredPattern);
+            activePattern = desiredPattern;
+            applyPattern(patternFor(activePattern, positioned, bar), newBar, target);
             patternChangePending = false;
+            applied = true;
         }
     }
+    if (!applied && newBar && pairMode() && paramInt(pPlayMode) == 0)
+        applyPattern(patternFor(activePattern, positioned, bar), true, target);
 
     unsigned n;
     if (v1Active) {
@@ -514,6 +555,7 @@ bool RubberDuckProcessor::importH30(const juce::File& file, juce::String& error)
             setParam(apvts, "playmode", static_cast<float>(e.playMode));
         }
         snapSmoothing.store(true);
+        loadPending.store(true);
         return true;
     }
 
@@ -545,6 +587,7 @@ bool RubberDuckProcessor::importH30(const juce::File& file, juce::String& error)
     }
     setParam(apvts, "pattern", static_cast<float>(1 + (h30.song[0] < rd::kNumPatterns ? h30.song[0] : 0)));
     snapSmoothing.store(true);
+    loadPending.store(true);
     return true;
 }
 

@@ -1,11 +1,14 @@
 // Headless tests of the plugin processor with a simulated host transport.
 //   RubberDuckPluginTests <installer content folder>
+// With RD_SNAPSHOT_DIR set, the editor tests also save PNG renders of the editor there.
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <cmath>
 #include <cstdio>
 
+#include "../plugin/Source/KeyLayout.h"
 #include "../plugin/Source/PluginProcessor.h"
+#include "../plugin/Source/StepEditor.h"
 #include "rd/EngineV1.h"
 #include "rd/Mixing.h"
 
@@ -322,6 +325,149 @@ int main(int argc, char** argv)
                 mb.addEvent(juce::MidiMessage::noteOn(1, 36, static_cast<juce::uint8>(120)), 0);
         });
         check(rms(played) > 0.01, "v1.02: MIDI note on the first block plays");
+    }
+
+    // 12. Loading a file mid-bar switches to its pattern at once (no steps of
+    //     the new file played at the previous pattern index).
+    for (const float engineKind : {0.0f, 1.0f}) {
+        RubberDuckProcessor source;
+        setParam(source, "engine", engineKind);
+        const auto tmp = juce::File::createTempFile("h30");
+        source.exportH30(tmp);
+
+        RubberDuckProcessor p;
+        FakeHost host;
+        p.setPlayHead(&host);
+        setParam(p, "engine", engineKind);
+        setParam(p, "pattern", 6.0f);
+        p.prepareToPlay(44100, 256);
+        run(p, host, 4.5, 256);
+        const bool before = p.getPlayingPattern() == 5;
+        juce::String err;
+        p.importH30(tmp, err);
+        run(p, host, 0.1, 256);
+        check(before && p.getPlayingPattern() == 0,
+              engineKind == 0.0f ? "v1.02: loading a file switches pattern at once" : "loading a file switches pattern at once");
+        tmp.deleteFile();
+    }
+
+    // 13. v1.02 Sequence mode: a pattern chosen for the next bar is the one
+    //     played there, then the range carries on from it.
+    {
+        RubberDuckProcessor p;
+        FakeHost host;
+        p.setPlayHead(&host);
+        setParam(p, "playmode", 1.0f);
+        setParam(p, "rangeend", 7.0f);
+        p.prepareToPlay(44100, 256);
+        run(p, host, 1.0, 256);
+        setParam(p, "pattern", 6.0f);
+        run(p, host, 1.5, 256);
+        const bool chosen = p.getPlayingPattern() == 5;
+        run(p, host, 2.0, 256);
+        check(chosen && p.getPlayingPattern() == 6, "v1.02 Sequence: next-bar change plays the chosen pattern");
+    }
+
+    // 14. 32-step mode: the selected pair alternates bar by bar, and sounds
+    //     exactly like the engine's own sequence of the same two patterns.
+    for (const float engineKind : {0.0f, 1.0f}) {
+        auto setup = [engineKind](RubberDuckProcessor& p, FakeHost& host) {
+            p.setPlayHead(&host);
+            setParam(p, "engine", engineKind);
+            SequenceData d = p.getSequence();
+            for (auto& st : d.patterns[1].steps)
+                if (st.note >= 0)
+                    st.note = static_cast<int8_t>(st.note + 5);
+            d.patterns[1].steps[3].accent = 1;
+            d.song[0] = 0;
+            d.song[1] = 1;
+            d.songLength = 2;
+            p.setSequence(d);
+            p.prepareToPlay(44100, 256);
+        };
+        RubberDuckProcessor pairs, sequence;
+        FakeHost hostA, hostB;
+        setup(pairs, hostA);
+        setup(sequence, hostB);
+        setParam(pairs, "length32", 1.0f);
+        setParam(sequence, "playmode", 1.0f);
+        setParam(sequence, "rangeend", 1.0f);
+
+        run(pairs, hostA, 1.0, 256);
+        const bool first = pairs.getPlayingPattern() == 0;
+        run(pairs, hostA, 2.0, 256);
+        const bool second = pairs.getPlayingPattern() == 1;
+        run(pairs, hostA, 2.0, 256);
+        check(first && second && pairs.getPlayingPattern() == 0,
+              engineKind == 0.0f ? "v1.02: 32-step pair alternates each bar" : "32-step pair alternates each bar");
+
+        RubberDuckProcessor pairs2;
+        FakeHost hostC;
+        setup(pairs2, hostC);
+        setParam(pairs2, "length32", 1.0f);
+        const auto a = run(pairs2, hostC, 9.0, 256);
+        const auto b = run(sequence, hostB, 9.0, 256);
+        check(a == b && rms(a) > 0.01, engineKind == 0.0f ? "v1.02: 32-step pair sounds like Sequence 0..1"
+                                                          : "32-step pair sounds like the song 0, 1");
+    }
+
+    // 15. Editor: tracker-style note entry, shift, transpose, undo, 32-step rows.
+    {
+        RubberDuckProcessor p;
+        std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+        StepEditor* steps = nullptr;
+        for (auto* c : editor->getChildren())
+            if (auto* s = dynamic_cast<StepEditor*>(c))
+                steps = s;
+        const auto snapshotDir = juce::SystemStats::getEnvironmentVariable("RD_SNAPSHOT_DIR", {});
+        auto settle = [&](const char* name) {
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+            if (snapshotDir.isEmpty())
+                return;
+            const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 2.0f);
+            const auto file = juce::File(snapshotDir).getChildFile(name);
+            file.deleteFile();
+            juce::FileOutputStream os(file);
+            juce::PNGImageFormat().writeImageToStream(image, os);
+        };
+        auto type = [&](keylayout::Position position) {
+            const auto c = static_cast<juce::juce_wchar>(keylayout::characterAt(position));
+            steps->keyPressed(juce::KeyPress(static_cast<int>(c), {}, c));
+        };
+        auto key = [&](int code, juce::ModifierKeys mods = {}) { steps->keyPressed(juce::KeyPress(code, mods, 0)); };
+        auto note = [&](int pattern, int step) { return p.getSequence().patterns[static_cast<size_t>(pattern)].steps[static_cast<size_t>(step)]; };
+        settle("1-default.png");
+
+        // Lower row Z X C = C, D, E of the entry octave (4 -> 48), upper row Q = C an octave up.
+        type(keylayout::Z);
+        type(keylayout::X);
+        type(keylayout::Q);
+        type(keylayout::K1);
+        key(juce::KeyPress::leftKey);
+        type(keylayout::A);
+        check(note(0, 0).note == 48 && note(0, 1).note == 50 && note(0, 2).note == 60 && note(0, 3).note == -1
+                  && note(0, 3).accent == 1,
+              "keyboard entry: notes, note off and accent");
+        key(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier);
+        check(note(0, 0).note == 49 && note(0, 2).note == 61, "transpose a semitone up");
+        key(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier);
+        check(note(0, 1).note == 49 && note(0, 0).note == 49 /* old step 16, transposed */
+                  && note(0, 4).accent == 1,
+              "shift the steps right");
+        key('z', juce::ModifierKeys::commandModifier);
+        key('z', juce::ModifierKeys::commandModifier);
+        check(note(0, 0).note == 48 && note(0, 1).note == 50, "undo twice");
+        key('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier);
+        check(note(0, 0).note == 49, "redo");
+        settle("2-typed.png");
+
+        setParam(p, "length32", 1.0f);
+        setParam(p, "engine", 1.0f);
+        settle("3-pairs-v212.png");
+        check(steps->numRows() == 2 && editor->getHeight() > 640, "32-step mode shows two rows");
+        setParam(p, "engine", 0.0f);
+        setParam(p, "playmode", 1.0f);
+        settle("4-pairs-v102-sequence.png");
     }
 
     std::printf("%d failure(s)\n", failures);
