@@ -3,23 +3,25 @@
 #include <algorithm>
 
 #include "KeyLayout.h"
+#include "RdLookAndFeel.h"
 
 namespace {
 
-const juce::Colour kBackground(0xff1b1d22);
-const juce::Colour kCell(0xff2a2d35);
-const juce::Colour kText(0xffe6e6e6);
-const juce::Colour kDim(0xff7d828c);
-const juce::Colour kAcid(0xffffb000);
-const juce::Colour kSlide(0xff4fc3f7);
-const juce::Colour kPlay(0xffff5252);
-
-constexpr float kHeaderH = 16.0f;
-constexpr float kNoteH = 44.0f;
-constexpr float kToggleH = 22.0f;
-constexpr float kGap = 4.0f;
-constexpr float kRowH = kHeaderH + kNoteH + kToggleH * 2 + kGap * 2;
-constexpr float kRowGap = 8.0f;
+// Geometry of a row of 16 steps, from the top: beat ruler, NOTE, ACCENT, SLIDE, STEP.
+constexpr float kRulerH = 14.0f;
+constexpr float kNoteH = 30.0f;
+constexpr float kLedH = 12.0f;
+constexpr float kKeyH = 30.0f;
+constexpr float kLineGap = 6.0f;
+constexpr float kNoteY = kRulerH + kLineGap;
+constexpr float kAccentY = kNoteY + kNoteH + kLineGap;
+constexpr float kSlideY = kAccentY + kLedH + kLineGap;
+constexpr float kKeyY = kSlideY + kLedH + kLineGap;
+constexpr float kRowH = kKeyY + kKeyH;  // 122
+constexpr float kRowGap = 14.0f;
+constexpr float kLabelW = 58.0f;  // label column, then 12 px
+constexpr float kGroupGap = 12.0f;
+constexpr float kCellGap = 4.0f;
 constexpr int kSteps = rd::kStepsPerPattern;
 constexpr size_t kMaxUndo = 200;
 
@@ -112,7 +114,7 @@ juce::String StepEditor::noteName(int note)
 {
     static const char* names[12] = {"C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"};
     if (note == -2)
-        return "...";
+        return "---";
     if (note == -1)
         return "OFF";
     if (note < 0)
@@ -120,16 +122,32 @@ juce::String StepEditor::noteName(int note)
     return juce::String(names[note % 12]) + juce::String(note / 12);
 }
 
+float StepEditor::groupWidth() const
+{
+    return (static_cast<float>(getWidth()) - kLabelW - kGroupGap - 3 * kGroupGap) / 4.0f;
+}
+
+float StepEditor::cellWidth() const
+{
+    return (groupWidth() - 3 * kCellGap) / 4.0f;
+}
+
+float StepEditor::cellX(int step) const
+{
+    const int group = step / 4, inGroup = step % 4;
+    return kLabelW + kGroupGap + static_cast<float>(group) * (groupWidth() + kGroupGap)
+           + static_cast<float>(inGroup) * (cellWidth() + kCellGap);
+}
+
 juce::Rectangle<float> StepEditor::cellBounds(int row, int step, Row kind) const
 {
-    const float w = static_cast<float>(getWidth()) / kSteps;
-    const float x = w * static_cast<float>(step) + 2.0f;
+    const float x = cellX(step), w = cellWidth();
     const float y = static_cast<float>(row) * (kRowH + kRowGap);
-    const float cw = w - 4.0f;
     switch (kind) {
-    case Row::Note: return {x, y + kHeaderH, cw, kNoteH};
-    case Row::Accent: return {x, y + kHeaderH + kNoteH + kGap, cw, kToggleH};
-    case Row::Slide: return {x, y + kHeaderH + kNoteH + kToggleH + 2 * kGap, cw, kToggleH};
+    case Row::Note: return {x, y + kNoteY, w, kNoteH};
+    case Row::Accent: return {x, y + kAccentY, w, kLedH};
+    case Row::Slide: return {x, y + kSlideY, w, kLedH};
+    case Row::Step: return {x, y + kKeyY, w, kKeyH};
     case Row::None: break;
     }
     return {};
@@ -139,13 +157,17 @@ bool StepEditor::hit(juce::Point<float> p, int& row, int& step, Row& kind) const
 {
     for (int r = 0; r < numRows(); ++r)
         for (int s = 0; s < kSteps; ++s)
-            for (Row k : {Row::Note, Row::Accent, Row::Slide})
-                if (cellBounds(r, s, k).contains(p)) {
+            for (Row k : {Row::Note, Row::Accent, Row::Slide, Row::Step}) {
+                // The LED rows take the whole step width and half the gaps around them.
+                const auto zone = k == Row::Accent || k == Row::Slide ? cellBounds(r, s, k).expanded(0.0f, kLineGap / 2)
+                                                                      : cellBounds(r, s, k);
+                if (zone.contains(p)) {
                     row = r;
                     step = s;
                     kind = k;
                     return true;
                 }
+            }
     return false;
 }
 
@@ -157,40 +179,116 @@ rd::Step& StepEditor::stepAt(int row, int step)
 
 void StepEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(kBackground);
+    auto* lf = RdLookAndFeel::of(*this);
+    if (lf == nullptr)
+        return;
+    const auto& t = lf->theme();
     const int rows = numRows();
     const int first = rows == 2 ? (patternIndex & ~1) : patternIndex;
     const bool running = processor.isSequencerRunning();
-    const bool focused = hasKeyboardFocus(true);
+    const bool showCursor = hasKeyboardFocus(true) || static_cast<bool>(getProperties()["rd.showCursor"]);
+    const float gw = groupWidth();
+
+    const auto labelFont = rd::ui::font(rd::ui::Face::Ui700, 10.5f, 0.16f);
+    const auto beatFont = rd::ui::font(rd::ui::Face::Ui700, 14.0f);
+    const auto noteFont = rd::ui::font(rd::ui::Face::Vfd, 15.0f);
+    const auto numberFont = rd::ui::font(rd::ui::Face::Ui600, 11.0f);
+    const auto labelColumn = [](float y, float h) { return juce::Rectangle<float>(0.0f, y, kLabelW, h); };
 
     for (int r = 0; r < rows; ++r) {
+        const float y0 = static_cast<float>(r) * (kRowH + kRowGap);
         const int playing = running && processor.getPlayingPattern() == first + r ? processor.getPlayingStep() : -1;
+
+        g.setColour(t.label);
+        g.setFont(labelFont);
+        if (rows == 2)
+            g.drawText("PAT " + juce::String::charToString(static_cast<juce::juce_wchar>("0123456789ABCDEF"[first + r])),
+                       labelColumn(y0, kRulerH), juce::Justification::centredRight, false);
+        g.drawText("NOTE", labelColumn(y0 + kNoteY, kNoteH), juce::Justification::centredRight, false);
+        g.drawText("ACCENT", labelColumn(y0 + kAccentY, kLedH), juce::Justification::centredRight, false);
+        g.drawText("SLIDE", labelColumn(y0 + kSlideY, kLedH), juce::Justification::centredRight, false);
+        g.drawText("STEP", labelColumn(y0 + kKeyY, kKeyH), juce::Justification::centredRight, false);
+
+        // Beat ruler and the VFD window of each beat.
+        for (int beat = 0; beat < 4; ++beat) {
+            const float x = cellX(beat * 4);
+            const auto number = juce::String(beat + 1);
+            const float nw = rd::ui::textWidth(beatFont, number);
+            g.setColour(t.ink);
+            g.setFont(beatFont);
+            g.drawText(number, juce::Rectangle<float>(x, y0, nw + 1.0f, kRulerH), juce::Justification::centredLeft, false);
+            g.setColour(t.ruler);
+            g.fillRect(juce::Rectangle<float>(x + nw + 6.0f, y0 + std::floor(kRulerH / 2), gw - nw - 6.0f, 1.0f));
+            lf->drawVfdWindow(g, {x, y0 + kNoteY, gw, kNoteH}, 3.0f);
+        }
+
         for (int s = 0; s < kSteps; ++s) {
             const auto& st = stepAt(r, s);
-            auto note = cellBounds(r, s, Row::Note);
+            const auto note = cellBounds(r, s, Row::Note);
 
-            g.setColour(s == playing ? kPlay : (s % 4 == 0 ? kDim : kCell));
-            g.fillRoundedRectangle(note.getX() + 4, note.getY() - kHeaderH + 4, note.getWidth() - 8, 6, 2);
-
-            g.setColour(kCell);
-            g.fillRoundedRectangle(note, 4);
-            if (focused && r == cursorRow && s == cursorStep) {
-                g.setColour(kText);
-                g.drawRoundedRectangle(note.reduced(1.0f), 4, 2.0f);
+            if (s == playing) {
+                g.setColour(t.acid);
+                g.fillRoundedRectangle(note, 2.0f);
+                g.setColour(t.vfd);
+                g.setFont(noteFont);
+                g.drawText(noteName(st.note), note, juce::Justification::centred, false);
+            } else {
+                const float alpha = st.note == -2 ? 0.28f : (st.note == -1 ? 0.55f : 1.0f);
+                lf->drawGlowText(g, noteName(st.note), noteFont, note, t.acid.withMultipliedAlpha(alpha),
+                                 juce::Justification::centred, true);
             }
-            g.setColour(st.note >= 0 ? kText : kDim);
-            g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
-            g.drawText(noteName(st.note), note, juce::Justification::centred);
-
-            for (Row k : {Row::Accent, Row::Slide}) {
-                auto b = cellBounds(r, s, k);
-                const bool on = k == Row::Accent ? st.accent != 0 : st.slide != 0;
-                g.setColour(on ? (k == Row::Accent ? kAcid : kSlide) : kCell);
-                g.fillRoundedRectangle(b, 3);
-                g.setColour(on ? kBackground : kDim);
-                g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-                g.drawText(k == Row::Accent ? "AC" : "SL", b, juce::Justification::centred);
+            if (r == hoverRow && s == hoverStep) {
+                g.setColour(t.acid.withAlpha(0.35f));
+                g.drawRoundedRectangle(note.reduced(0.5f), 2.0f, 1.0f);
             }
+            if (showCursor && r == cursorRow && s == cursorStep) {
+                const auto bar = juce::Rectangle<float>(note.getX() + note.getWidth() * 0.22f, note.getBottom() - 6.0f,
+                                                        note.getWidth() * 0.56f, 2.0f);
+                juce::DropShadow(t.cursor.withAlpha(0.8f), 6, {}).drawForRectangle(g, bar.toNearestInt());
+                g.setColour(t.cursor);
+                g.fillRect(bar);
+            }
+
+            // Accent LED.
+            const auto accent = cellBounds(r, s, Row::Accent);
+            lf->drawLed(g, accent.getCentre(), 8.0f, st.accent ? t.acid : t.accOff, st.accent != 0, true);
+
+            // Slide: a tie to the next step, under the LEDs. Across the pair in
+            // 32-step mode it leaves step 16 and enters step 17.
+            const auto slide = cellBounds(r, s, Row::Slide);
+            const float tieY = slide.getY() + 5.0f;
+            g.setColour(t.slideTie);
+            if (st.slide) {
+                const float to = s < kSteps - 1 ? cellBounds(r, s + 1, Row::Slide).getCentreX() : slide.getRight();
+                g.fillRect(juce::Rectangle<float>(slide.getCentreX(), tieY, to - slide.getCentreX(), 2.0f));
+            }
+            if (s == 0 && r == 1 && stepAt(0, kSteps - 1).slide)
+                g.fillRect(juce::Rectangle<float>(slide.getCentreX() - 14.0f, tieY, 14.0f, 2.0f));
+        }
+        // LEDs over the ties.
+        for (int s = 0; s < kSteps; ++s) {
+            const bool on = stepAt(r, s).slide != 0;
+            lf->drawLed(g, cellBounds(r, s, Row::Slide).getCentre(), 8.0f, on ? t.slide : t.slideOff, on, true);
+        }
+
+        // Step keys: beats 1 and 3 light, 2 and 4 darker, LED bar on top.
+        for (int s = 0; s < kSteps; ++s) {
+            const auto key = cellBounds(r, s, Row::Step);
+            const bool beatA = (s / 4) % 2 == 0;
+            lf->drawKey(g, key, 4.0f, beatA ? t.stepA : t.stepB, beatA ? t.stepAHi : t.stepBHi, t.stepLo);
+            g.setColour(t.stepNum);
+            g.setFont(numberFont);
+            g.drawText(juce::String(r * kSteps + s + 1),
+                       juce::Rectangle<float>(key.getX(), key.getBottom() - 5.0f - 13.2f, key.getWidth(), 13.2f),
+                       juce::Justification::centred, false);
+            const auto led = juce::Rectangle<float>(14.0f, 3.0f).withCentre({key.getCentreX(), key.getY() + 6.5f});
+            if (s == playing) {
+                juce::DropShadow(t.play.withAlpha(0.7f), 8, {}).drawForRectangle(g, led.toNearestInt());
+                g.setColour(t.play);
+            } else {
+                g.setColour(t.playOff);
+            }
+            g.fillRoundedRectangle(led, 1.5f);
         }
     }
 }
@@ -360,6 +458,11 @@ void StepEditor::mouseDown(const juce::MouseEvent& e)
         checkpoint();
         stepAt(row, step).slide = stepAt(row, step).slide ? 0 : 1;
         commit();
+    } else if (kind == Row::Step) {
+        cursorRow = row;
+        cursorStep = step;
+        grabKeyboardFocus();
+        repaint();
     } else if (kind == Row::Note) {
         cursorRow = row;
         cursorStep = step;
@@ -403,6 +506,27 @@ void StepEditor::mouseDoubleClick(const juce::MouseEvent& e)
         return;
     checkpoint();
     setNote(row, step, stepAt(row, step).note >= 0 ? -2 : lastNote);
+}
+
+void StepEditor::mouseMove(const juce::MouseEvent& e)
+{
+    int row = -1, step = -1;
+    Row kind = Row::None;
+    if (!hit(e.position, row, step, kind) || kind != Row::Note)
+        row = step = -1;
+    if (row != hoverRow || step != hoverStep) {
+        hoverRow = row;
+        hoverStep = step;
+        repaint();
+    }
+}
+
+void StepEditor::mouseExit(const juce::MouseEvent&)
+{
+    if (hoverStep >= 0) {
+        hoverRow = hoverStep = -1;
+        repaint();
+    }
 }
 
 void StepEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel)

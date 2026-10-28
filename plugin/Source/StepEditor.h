@@ -8,9 +8,13 @@
 
 // Edits the steps of one pattern, or of a pair of patterns shown as two rows
 // in 32-step mode: note (drag or wheel to change, double click to toggle rest,
-// right click for more), accent and slide. Clicking a note puts the keyboard
-// cursor there; notes are then typed tracker style (two piano rows at fixed
-// key positions, whatever the keyboard layout).
+// right click for more), accent and slide. Clicking a note or a step key puts
+// the keyboard cursor there; notes are then typed tracker style (two piano rows
+// at fixed key positions, whatever the keyboard layout).
+//
+// Each row: beat ruler, NOTE (one VFD window per beat), ACCENT and SLIDE LEDs,
+// STEP keys. The keyboard cursor shows while the editor has the focus, or always
+// with the component property "rd.showCursor" (for renders).
 class StepEditor : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
 {
 public:
@@ -49,6 +53,8 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(FocusChangeType) override;
@@ -57,13 +63,17 @@ public:
     static juce::String noteName(int note);
 
 private:
-    enum class Row { None, Note, Accent, Slide };
+    enum class Row { None, Note, Accent, Slide, Step };
     struct NoteKey {
         juce::juce_wchar character;
         int semitone;  // from C of the entry octave
     };
 
     void timerCallback() override;
+    float groupWidth() const;
+    float cellWidth() const;
+    float cellX(int step) const;
+    // Drawn bounds of a step's note cell, LED row or key.
     juce::Rectangle<float> cellBounds(int row, int step, Row kind) const;
     bool hit(juce::Point<float> p, int& row, int& step, Row& kind) const;
     rd::Step& stepAt(int row, int step);
@@ -86,6 +96,7 @@ private:
     bool dragChanged = false;
     int shownStep = -1, shownPattern = -1;
     int shownRows = 1;
+    int hoverRow = -1, hoverStep = -1;  // note cell under the mouse
 
     int cursorRow = 0, cursorStep = 0;
     int entryOctave = 4;  // octave of the lower piano row; 4 is "C-4" (MIDI C1)
