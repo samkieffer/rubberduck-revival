@@ -14,7 +14,7 @@ wine build-oracle/oracle.exe reference/rdh3o.exe fuzz
 wine build-oracle/oracle.exe reference/rdh3o.exe dump in.h30 out.raw 3000 [mode]
 
 wine build-oracle/oracle_v1.exe reference/RUBDUCK.EXE              # engine, output stage, distortion, fuzz
-wine build-oracle/oracle_v1.exe reference/RUBDUCK.EXE allfiles reference/content
+wine build-oracle/oracle_v1.exe reference/RUBDUCK.EXE allfiles reference/content [blocks] [blocks/period]
 wine build-oracle/oracle_v1.exe reference/RUBDUCK.EXE hashes tests/fixtures   # "|v1" hash lines
 ```
 

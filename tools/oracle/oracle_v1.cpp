@@ -355,13 +355,16 @@ int main(int argc, char** argv)
             ok &= testEngine(f, "engine 80'$$$", 200, 8);
     }
     if (only == "allfiles") {
+        // allfiles <dir> [blocks] [blocks per period]
+        const unsigned bpp = argc > 5 ? static_cast<unsigned>(std::atoi(argv[5])) : 8;
+        const unsigned periods = (argc > 4 ? static_cast<unsigned>(std::atoi(argv[4])) : 2000) / bpp;
         int files = 0, failed = 0;
         for (const auto& name : listFiles(dir)) {
             rd::H30File f;
             if (!loadFile(std::string(dir) + "/" + name, f))
                 continue;
             files++;
-            if (!testEngine(f, name.c_str(), 250, 8))
+            if (!testEngine(f, name.c_str(), periods, bpp))
                 failed++;
         }
         std::printf("files=%d failed=%d\n", files, failed);
