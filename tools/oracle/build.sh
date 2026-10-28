@@ -10,4 +10,8 @@ i686-w64-mingw32-g++ -std=c++17 -O2 -msse2 -mfpmath=sse -ffp-contract=off \
     -I"$root/core/include" -I"$here" \
     "$here/oracle_main.cpp" $(ls "$root"/core/src/*.cpp) "$out/rdimage.o" \
     -static -Wl,--image-base,0x00200000 -Wl,--section-start=.rdimg=0x00400000 -Wl,--disable-dynamicbase -Wl,--disable-reloc-section -s -o "$out/oracle.exe"
-echo "built $out/oracle.exe"
+i686-w64-mingw32-g++ -std=c++17 -O2 -msse2 -mfpmath=sse -ffp-contract=off \
+    -I"$root/core/include" -I"$here" \
+    "$here/oracle_v1.cpp" $(ls "$root"/core/src/*.cpp) "$out/rdimage.o" \
+    -static -Wl,--image-base,0x00200000 -Wl,--section-start=.rdimg=0x00400000 -Wl,--disable-dynamicbase -Wl,--disable-reloc-section -s -o "$out/oracle_v1.exe"
+echo "built $out/oracle.exe $out/oracle_v1.exe"

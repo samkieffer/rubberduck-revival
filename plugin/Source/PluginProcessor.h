@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "rd/Engine.h"
+#include "rd/EngineV1.h"
 #include "rd/H30File.h"
 
 // Patterns and song, edited by the UI and copied to the engine on the audio
@@ -23,6 +24,8 @@ class RubberDuckProcessor : public juce::AudioProcessor
 public:
     enum class Source { Patterns = 0, MidiNotes = 1 };
     enum class Quantize { NextBar = 0, NextStep = 1, Immediate = 2 };
+    // Choice parameter "engine", in chronological order.
+    enum class EngineKind { V102 = 0, V212 = 1 };
 
     RubberDuckProcessor();
     ~RubberDuckProcessor() override = default;
@@ -60,6 +63,8 @@ public:
     int getPlayingStep() const { return playingStep.load(); }
     int getPlayingPattern() const { return playingPattern.load(); }
     bool isSequencerRunning() const { return sequencerRunning.load(); }
+    EngineKind getEngineKind() const { return static_cast<EngineKind>(paramInt(pEngine)); }
+    int numPatterns() const { return getEngineKind() == EngineKind::V102 ? rd::kNumPatternsV1 : rd::kNumPatterns; }
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -73,10 +78,15 @@ private:
     void readParameters();
     void renderEngineBlock(int64_t blockHostTime, int64_t bufferStart, double ppqAtBufferStart, double bpm,
                            bool hostPlaying);
+    // Sequencer position for a block (2^16 per step); false before the song start.
+    bool hostPosition(int64_t blockHostTime, int64_t bufferStart, double ppqAtBufferStart, double bpm,
+                      uint32_t& position) const;
     void handleMidi(const juce::MidiMessage& m);
     int paramInt(std::atomic<float>* p) const { return static_cast<int>(std::lround(p->load())); }
 
-    rd::Engine engine;
+    rd::Engine engine;      // v2.12
+    rd::EngineV1 engineV1;  // v1.02
+    bool v1Active = false;
 
     juce::SpinLock sequenceLock;
     SequenceData sequence;
@@ -110,9 +120,14 @@ private:
     std::atomic<float>* pPlayMode = nullptr;
     std::atomic<float>* pSource = nullptr;
     std::atomic<float>* pQuantize = nullptr;
+    std::atomic<float>* pEngine = nullptr;
+    std::atomic<float>* pRangeStart = nullptr;
+    std::atomic<float>* pRangeEnd = nullptr;
+    std::atomic<float> lastBpm{120.0f};
 
-    // Host / engine time bookkeeping. The engine runs at 44.1 kHz in blocks of
-    // 128 samples; its output is resampled when the host runs at another rate.
+    // Host / engine time bookkeeping. The engines run at 44.1 kHz in blocks of
+    // 128 (v2.12) or 64 (v1.02) samples; their output is resampled when the
+    // host runs at another rate.
     double hostRate = 44100.0;
     bool direct = true;
     int64_t hostSamplePos = 0;

@@ -180,7 +180,7 @@ void Engine::triggerStep(const Step& s, uint32_t inc)
         envStage = 1;
     }
     // Glide rate: covers the note distance within one step.
-    int32_t rate = (pitchDistance(voice1, targetNote) << 8) / static_cast<int32_t>(0x10000u / (inc ? inc : 1));
+    int32_t rate = (pitchDistance(voice1, targetNote) * 256) / static_cast<int32_t>(0x10000u / (inc ? inc : 1));
     if (rate < 0)
         rate = -rate;
     slideRate = rate + 1;

@@ -6,6 +6,7 @@
 #include <cstdio>
 
 #include "../plugin/Source/PluginProcessor.h"
+#include "rd/EngineV1.h"
 #include "rd/Mixing.h"
 
 namespace {
@@ -207,6 +208,120 @@ int main(int argc, char** argv)
                   == std::lround(a.apvts.getRawParameterValue("cutoff")->load()),
               "exported parameters survive the round trip");
         tmp.deleteFile();
+    }
+
+    // 7. v1.02 file: selects the 1997 engine, output identical to EngineV1
+    //    driven by the host positions.
+    const juce::File v1File(content + "/80'$$$.h30");
+    {
+        RubberDuckProcessor p;
+        FakeHost host;
+        host.bpm = 133.0;
+        p.setPlayHead(&host);
+        juce::String err;
+        check(p.importH30(v1File, err), "import 80'$$$.h30 (v1.02 file)");
+        check(p.getEngineKind() == RubberDuckProcessor::EngineKind::V102, "v1.02 file selects the v1.02 engine");
+        p.prepareToPlay(44100, 441);
+        auto out = run(p, host, 8.0, 441);
+
+        rd::H30File f;
+        rd::H30File::load(v1File.getFullPathName().toStdString(), f);
+        rd::EngineV1 e;
+        f.applyTo(e);
+        e.setTempo(133.0f);
+        std::vector<int16_t> block(64);
+        size_t mismatches = 0;
+        for (size_t k = 0; k * 64 < out.size(); ++k) {
+            const double ppq = static_cast<double>(k * 64) / 44100.0 * 133.0 / 60.0;
+            if (k == 0) {
+                e.forceTrigger();
+                e.setRunning(true);
+            }
+            e.setNextPosition(static_cast<uint32_t>(static_cast<int64_t>(std::floor(ppq * 262144.0))));
+            e.render(block.data(), 1);
+            rd::EngineV1::applyVolume(block.data(), 64, e.params.volume);
+            for (size_t i = 0; i < 64 && k * 64 + i < out.size(); ++i)
+                mismatches += out[k * 64 + i] != static_cast<float>(block[i]) / 32768.0f;
+        }
+        if (mismatches)
+            std::printf("   %zu mismatching samples\n", mismatches);
+        check(mismatches == 0, "v1.02: 44.1 kHz output identical to EngineV1 (host sync)");
+        check(rms(out) > 0.01, "v1.02: output is not silent");
+    }
+
+    // 8. v1.02 export writes a version-2 file that loads back the same.
+    {
+        RubberDuckProcessor a;
+        juce::String err;
+        a.importH30(v1File, err);
+        setParam(a, "rangeend", 5.0f);
+        setParam(a, "resonance", 201.0f);
+        auto tmp = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("rd_roundtrip_v1.h30");
+        check(a.exportH30(tmp), "v1.02: export .h30");
+        rd::H30File f;
+        check(rd::H30File::load(tmp.getFullPathName().toStdString(), f) && f.version == 2 && f.rangeEnd == 5,
+              "v1.02: exported file is version 2 with the range");
+        RubberDuckProcessor b;
+        b.importH30(tmp, err);
+        check(std::lround(b.apvts.getRawParameterValue("resonance")->load()) == 201
+                  && b.getEngineKind() == RubberDuckProcessor::EngineKind::V102,
+              "v1.02: exported parameters survive the round trip");
+        tmp.deleteFile();
+    }
+
+    // 9. A project saved before the engine choice existed stays on v2.12.
+    {
+        RubberDuckProcessor a;
+        juce::String err;
+        a.importH30(acid, err);
+        juce::MemoryBlock state;
+        a.getStateInformation(state);
+        std::unique_ptr<juce::XmlElement> xml(juce::AudioProcessor::getXmlFromBinary(state.getData(), static_cast<int>(state.getSize())));
+        if (auto* e = xml->getChildByAttribute("id", "engine"))
+            xml->removeChildElement(e, true);
+        juce::MemoryBlock old;
+        juce::AudioProcessor::copyXmlToBinary(*xml, old);
+        RubberDuckProcessor b;
+        check(b.getEngineKind() == RubberDuckProcessor::EngineKind::V102, "new instances start on v1.02");
+        b.setStateInformation(old.getData(), static_cast<int>(old.getSize()));
+        check(b.getEngineKind() == RubberDuckProcessor::EngineKind::V212, "old projects restore on v2.12");
+    }
+
+    // 10. Switching engines while playing, and v1.02 pattern changes at the bar.
+    {
+        RubberDuckProcessor p;
+        FakeHost host;
+        p.setPlayHead(&host);
+        p.prepareToPlay(44100, 256);
+        auto a = run(p, host, 1.0, 256);
+        setParam(p, "engine", 1.0f);
+        auto b = run(p, host, 1.0, 256);
+        setParam(p, "engine", 0.0f);
+        auto c = run(p, host, 0.5, 256);
+        check(rms(a) > 0.01 && rms(b) > 0.01 && rms(c) > 0.01, "engine switch while playing keeps playing");
+        setParam(p, "pattern", 4.0f);
+        run(p, host, 0.4, 256);
+        check(p.getPlayingPattern() != 3, "v1.02: pattern change waits for the bar line");
+        run(p, host, 2.1, 256);
+        check(p.getPlayingPattern() == 3, "v1.02: pattern change applied at the next bar");
+        setParam(p, "pattern", 16.0f);
+        run(p, host, 2.1, 256);
+        check(p.getPlayingPattern() == 3, "v1.02: patterns past 14 are ignored");
+    }
+
+    // 11. v1.02 live notes from the very first block.
+    {
+        RubberDuckProcessor p;
+        FakeHost host;
+        host.playing = false;
+        p.setPlayHead(&host);
+        setParam(p, "source", 1.0f);
+        p.prepareToPlay(44100, 128);
+        auto played = run(p, host, 0.5, 128, [](juce::MidiBuffer& mb, int64_t t) {
+            if (t == 0)
+                mb.addEvent(juce::MidiMessage::noteOn(1, 36, static_cast<juce::uint8>(120)), 0);
+        });
+        check(rms(played) > 0.01, "v1.02: MIDI note on the first block plays");
     }
 
     std::printf("%d failure(s)\n", failures);

@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "rdimage.h"
 
 static unsigned rd_rand_state = 1;
@@ -30,7 +31,43 @@ void rd_patch_jump(DWORD from, void *to)
     *(DWORD *)(p + 1) = (DWORD)to - (from + 5);
 }
 
-int rd_load(const char *path)
+// Called for imports that cannot be resolved (MFC42 is not part of Wine);
+// the routines under test never reach them.
+static void __cdecl rd_missing_import(void)
+{
+    fprintf(stderr, "oracle: call to an unresolved import\n");
+    ExitProcess(3);
+}
+
+// MSVC __ftol: truncates st(0) to a 64-bit integer in edx:eax and pops it.
+// The v1.02 binary imports it from MSVCRT; this copy keeps the result
+// independent of the Wine version.
+__asm__(".globl _rd_ftol\n"
+        "_rd_ftol:\n"
+        "  subl $12, %esp\n"
+        "  fnstcw 8(%esp)\n"
+        "  movw 8(%esp), %ax\n"
+        "  orw $0x0c00, %ax\n"
+        "  movw %ax, 10(%esp)\n"
+        "  fldcw 10(%esp)\n"
+        "  fistpll (%esp)\n"
+        "  fldcw 8(%esp)\n"
+        "  movl (%esp), %eax\n"
+        "  movl 4(%esp), %edx\n"
+        "  addl $12, %esp\n"
+        "  ret\n");
+void rd_ftol(void);
+
+static void *rd_import_override(const char *name)
+{
+    if (!strcmp(name, "rand")) return (void *)rd_rand;
+    if (!strcmp(name, "_ftol")) return (void *)rd_ftol;
+    if (!strcmp(name, "malloc")) return (void *)malloc;
+    if (!strcmp(name, "free")) return (void *)free;
+    return NULL;
+}
+
+static int rd_map(const char *path)
 {
     FILE *f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "cannot open %s\n", path); return 0; }
@@ -69,18 +106,25 @@ int rd_load(const char *path)
     IMAGE_DATA_DIRECTORY *dir = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
     for (IMAGE_IMPORT_DESCRIPTOR *imp = (IMAGE_IMPORT_DESCRIPTOR *)(img + dir->VirtualAddress); imp->Name; imp++) {
         HMODULE mod = LoadLibraryA((char *)(img + imp->Name));
-        if (!mod) { fprintf(stderr, "cannot load %s\n", img + imp->Name); return 0; }
         DWORD *lookup = (DWORD *)(img + (imp->OriginalFirstThunk ? imp->OriginalFirstThunk : imp->FirstThunk));
         DWORD *iat = (DWORD *)(img + imp->FirstThunk);
         for (; *lookup; lookup++, iat++) {
-            FARPROC fn = (*lookup & IMAGE_ORDINAL_FLAG32)
-                ? GetProcAddress(mod, (LPCSTR)(*lookup & 0xffff))
-                : GetProcAddress(mod, ((IMAGE_IMPORT_BY_NAME *)(img + *lookup))->Name);
-            *iat = (DWORD)fn;
+            const char *name = (*lookup & IMAGE_ORDINAL_FLAG32) ? NULL
+                : (const char *)((IMAGE_IMPORT_BY_NAME *)(img + *lookup))->Name;
+            void *fn = name ? rd_import_override(name) : NULL;
+            if (!fn && mod)
+                fn = (void *)(name ? GetProcAddress(mod, name) : GetProcAddress(mod, (LPCSTR)(*lookup & 0xffff)));
+            *iat = (DWORD)(fn ? fn : (void *)rd_missing_import);
         }
     }
     free(file);
+    return 1;
+}
 
+int rd_load(const char *path)
+{
+    if (!rd_map(path))
+        return 0;
     rd_patch_jump(RD_ADDR_RAND, rd_rand);
     // The original CRT heap is never initialised here: route malloc/free to ours.
     rd_patch_jump(RD_ADDR_MALLOC, malloc);
@@ -89,4 +133,11 @@ int rd_load(const char *path)
     typedef int (*cpu_fn)(void);
     *(int *)RD_ADDR_MMX_FLAG = ((cpu_fn)RD_ADDR_MMX_DETECT)();
     return 1;
+}
+
+int rd_load_v1(const char *path)
+{
+    // RUBDUCK.EXE v1.02 links the CRT dynamically: rand, _ftol, malloc and
+    // free are redirected through its import table (rd_import_override).
+    return rd_map(path);
 }

@@ -27,8 +27,10 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -j 4
 
-      - name: Bit-exact engine (synthetic patterns, hashes from the original)
-        run: ./build/rdcheck tests/fixtures tests/fixtures/hashes.txt
+      - name: Bit-exact engines (synthetic patterns, hashes from the originals)
+        run: |
+          ./build/rdcheck tests/fixtures tests/fixtures/hashes.txt
+          ./build/engine_v1_sync tests/fixtures
 
       - name: Validate the Audio Unit (auval)
         run: |
@@ -65,3 +67,4 @@ jobs:
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRD_BUILD_PLUGIN=OFF
       - run: cmake --build build -j 4
       - run: ./build/rdcheck tests/fixtures tests/fixtures/hashes.txt
+      - run: ./build/engine_v1_sync tests/fixtures

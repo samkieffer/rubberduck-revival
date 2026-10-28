@@ -13,6 +13,16 @@ constexpr int kAccentVelocity = 100;      // MIDI notes at or above play accente
 constexpr int kMidiToPatternNote = 24;    // MIDI 24 (C1) = pattern note 48 ("C-4")
 constexpr int kPatternSelectLowNote = 36; // in pattern mode, C2..D#3 select patterns 1..16
 
+// Osc1 choice (v2.12 numbering) to v1.02's three waveforms and back; v1.02 has
+// no triangle and plays it as a saw.
+constexpr uint8_t kOsc1ToV1[4] = {1, 0, 1, 2};
+constexpr int kOsc1FromV1[3] = {1, 2, 3};
+
+int tempoKnobFor(float bpm)
+{
+    return juce::jlimit(0, 255, static_cast<int>(std::lround((bpm - 60.0f) * 255.0f / 190.0f)));
+}
+
 // A simple default line so a fresh instance plays something.
 SequenceData defaultSequence()
 {
@@ -46,7 +56,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout RubberDuckProcessor::createL
         p.push_back(std::make_unique<AudioParameterChoice>(ParameterID{id, 1}, name, items, def));
     };
 
-    // Same ranges and defaults as the original (see docs/reverse-engineering.md).
+    // Same ranges and defaults as the original v2.12 (see docs/reverse-engineering.md);
+    // the v1.02 engine reads the same parameters where it has them.
+    choice("engine", "Engine", {"v1.02 (1997)", "v2.12 (2000)"}, 0);
     knob("cutoff", "Cut Off", 0, 255, 128);
     knob("resonance", "Resonance", 0, 255, 64);
     knob("modulation", "Modulation", 0, 255, 128);
@@ -73,6 +85,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout RubberDuckProcessor::createL
     choice("playmode", "Play Mode", {"Single", "Sequence", "Shuffle"}, 0);
     choice("source", "Sequencer Source", {"Patterns", "MIDI notes"}, 0);
     choice("quantize", "Pattern Change", {"Next bar", "Next step", "Immediate"}, 0);
+    // v1.02 sequence and random modes play a range of patterns (not the song).
+    const StringArray v1Patterns{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D"};
+    choice("rangestart", "Range From (v1.02)", v1Patterns, 0);
+    choice("rangeend", "Range To (v1.02)", v1Patterns, 0);
     return {p.begin(), p.end()};
 }
 
@@ -107,6 +123,9 @@ RubberDuckProcessor::RubberDuckProcessor()
     pPlayMode = raw("playmode");
     pSource = raw("source");
     pQuantize = raw("quantize");
+    pEngine = raw("engine");
+    pRangeStart = raw("rangestart");
+    pRangeEnd = raw("rangeend");
 
     sequence = defaultSequence();
     readParameters();
@@ -164,13 +183,35 @@ void RubberDuckProcessor::readParameters()
     P.distortionGain = paramInt(pDistGain);
     P.distortionDrive = paramInt(pDistDrive);
     engine.playMode = static_cast<rd::PlayMode>(paramInt(pPlayMode));
+
+    rd::ParamsV1& Q = engineV1.params;
+    Q.volume = P.volume;
+    Q.tune = P.tune;
+    Q.accent = P.accent;
+    Q.osc1Type = kOsc1ToV1[P.osc1Type & 3];
+    Q.osc2Type = P.osc2Type;
+    Q.osc2Double = P.osc2Double;
+    Q.oscMix = P.oscMix;
+    Q.attack = P.attack;
+    Q.decay = P.decay;
+    Q.cutoff = P.cutoff;
+    Q.modulation = P.modulation;
+    Q.resonance = P.resonance;
+    Q.delayTime = P.delayTime;
+    Q.delayGain = P.delayGain;
+    Q.delayFeedback = P.delayFeedback;
+    Q.distortionAmount = P.distortionGain;
+    Q.distortionCurve = P.distortionDrive;
+    engineV1.playMode = static_cast<rd::PlayModeV1>(paramInt(pPlayMode));
+    engineV1.rangeStart = paramInt(pRangeStart);
+    engineV1.rangeEnd = paramInt(pRangeEnd);
 }
 
 void RubberDuckProcessor::handleMidi(const juce::MidiMessage& m)
 {
     const auto source = static_cast<Source>(paramInt(pSource));
     if (m.isProgramChange()) {
-        if (m.getProgramChangeNumber() < rd::kNumPatterns) {
+        if (m.getProgramChangeNumber() < numPatterns()) {
             desiredPattern = m.getProgramChangeNumber();
             patternChangePending = true;
         }
@@ -179,7 +220,7 @@ void RubberDuckProcessor::handleMidi(const juce::MidiMessage& m)
     if (source == Source::Patterns) {
         if (m.isNoteOn()) {
             const int index = m.getNoteNumber() - kPatternSelectLowNote;
-            if (index >= 0 && index < rd::kNumPatterns) {
+            if (index >= 0 && index < numPatterns()) {
                 desiredPattern = index;
                 patternChangePending = true;
             }
@@ -192,24 +233,57 @@ void RubberDuckProcessor::handleMidi(const juce::MidiMessage& m)
         const bool legato = !heldNotes.empty();
         heldNotes.erase(std::remove(heldNotes.begin(), heldNotes.end(), note), heldNotes.end());
         heldNotes.push_back(note);
-        engine.noteOn(note + kMidiToPatternNote, m.getVelocity() >= kAccentVelocity, legato);
+        if (v1Active)
+            engineV1.noteOn(note + kMidiToPatternNote, m.getVelocity() >= kAccentVelocity, legato);
+        else
+            engine.noteOn(note + kMidiToPatternNote, m.getVelocity() >= kAccentVelocity, legato);
     } else if (m.isNoteOff()) {
         const int note = m.getNoteNumber();
         const bool wasLast = !heldNotes.empty() && heldNotes.back() == note;
         heldNotes.erase(std::remove(heldNotes.begin(), heldNotes.end(), note), heldNotes.end());
-        if (heldNotes.empty())
+        if (heldNotes.empty()) {
             engine.noteOff();
-        else if (wasLast)
-            engine.noteOn(heldNotes.back() + kMidiToPatternNote, false, true);
+            engineV1.noteOff();
+        } else if (wasLast) {
+            if (v1Active)
+                engineV1.noteOn(heldNotes.back() + kMidiToPatternNote, false, true);
+            else
+                engine.noteOn(heldNotes.back() + kMidiToPatternNote, false, true);
+        }
     } else if (m.isAllNotesOff() || m.isAllSoundOff()) {
         heldNotes.clear();
         engine.noteOff();
+        engineV1.noteOff();
     }
+}
+
+bool RubberDuckProcessor::hostPosition(int64_t blockHostTime, int64_t bufferStart, double ppqAtBufferStart, double bpm,
+                                       uint32_t& position) const
+{
+    const double ppq = ppqAtBufferStart + static_cast<double>(blockHostTime - bufferStart) / hostRate * bpm / 60.0;
+    if (ppq < 0.0)
+        return false;
+    // 2^18 per quarter note: 2^16 per sixteenth step, 2^20 per bar.
+    position = static_cast<uint32_t>(static_cast<int64_t>(std::floor(ppq * 262144.0)));
+    return true;
 }
 
 void RubberDuckProcessor::renderEngineBlock(int64_t blockHostTime, int64_t bufferStart, double ppqAtBufferStart,
                                             double bpm, bool hostPlaying)
 {
+    const bool useV1 = getEngineKind() == EngineKind::V102;
+    if (useV1 != v1Active) {
+        // Engine switch: the other engine stops, the new one starts on the next block.
+        v1Active = useV1;
+        engine.setRunning(false);
+        engineV1.setRunning(false);
+        heldNotes.clear();
+        if (useV1)
+            engine.noteOff();
+        else
+            engineV1.noteOff();
+    }
+
     // MIDI events due by the time this block is heard.
     size_t used = 0;
     while (used < pendingMidi.size() && pendingMidi[used].hostTime <= blockHostTime)
@@ -218,8 +292,10 @@ void RubberDuckProcessor::renderEngineBlock(int64_t blockHostTime, int64_t buffe
         pendingMidi.erase(pendingMidi.begin(), pendingMidi.begin() + static_cast<long>(used));
 
     readParameters();
-    if (snapSmoothing.exchange(false))
+    if (snapSmoothing.exchange(false)) {
         engine.resetSmoothing();
+        engineV1.reset();
+    }
 
     const int patternParam = paramInt(pPattern) - 1;
     if (patternParam != lastPatternParam) {
@@ -229,11 +305,19 @@ void RubberDuckProcessor::renderEngineBlock(int64_t blockHostTime, int64_t buffe
     }
 
     bool newBar = false, newStep = false;
-    if (static_cast<Source>(paramInt(pSource)) == Source::Patterns && hostPlaying) {
-        const double ppq = ppqAtBufferStart + static_cast<double>(blockHostTime - bufferStart) / hostRate * bpm / 60.0;
-        if (ppq >= 0.0) {
-            // 2^18 per quarter note: 2^16 per sixteenth step, 2^20 per bar.
-            const auto target = static_cast<uint32_t>(static_cast<int64_t>(std::floor(ppq * 262144.0)));
+    uint32_t target = 0;
+    const bool sequencing = static_cast<Source>(paramInt(pSource)) == Source::Patterns && hostPlaying;
+    if (sequencing && hostPosition(blockHostTime, bufferStart, ppqAtBufferStart, bpm, target)) {
+        if (v1Active) {
+            if (startPending || !engineV1.isRunning()) {
+                engineV1.forceTrigger();
+                engineV1.setRunning(true);
+                startPending = false;
+            }
+            const int flags = engineV1.setNextPosition(target);
+            newStep = (flags & rd::EngineV1::kNewStep) != 0;
+            newBar = (flags & rd::EngineV1::kNewBar) != 0;
+        } else {
             engine.setNextPosition(target);
             if (startPending || !engine.isRunning()) {
                 engine.forceTrigger();
@@ -243,34 +327,47 @@ void RubberDuckProcessor::renderEngineBlock(int64_t blockHostTime, int64_t buffe
             newBar = (target >> 20) != (engine.previousPosition() >> 20);
             newStep = (target >> 16) != (engine.previousPosition() >> 16);
         }
-    } else if (engine.isRunning()) {
+    } else if (!sequencing) {
         engine.setRunning(false);
+        engineV1.setRunning(false);
     }
 
+    const bool running = v1Active ? engineV1.isRunning() : engine.isRunning();
     if (patternChangePending) {
         const auto q = static_cast<Quantize>(paramInt(pQuantize));
-        if (q == Quantize::Immediate || !engine.isRunning() || (q == Quantize::NextBar && newBar)
+        if (q == Quantize::Immediate || !running || (q == Quantize::NextBar && newBar)
             || (q == Quantize::NextStep && newStep)) {
-            engine.selectPattern(desiredPattern);
+            if (v1Active)
+                engineV1.selectPattern(desiredPattern);
+            else
+                engine.selectPattern(desiredPattern);
             patternChangePending = false;
         }
     }
 
-    engine.render(blockBuffer.data(), 1);
+    unsigned n;
+    if (v1Active) {
+        n = rd::kBlockSizeV1;
+        engineV1.render(blockBuffer.data(), 1);
+        rd::EngineV1::applyVolume(blockBuffer.data(), n, engineV1.params.volume);
+    } else {
+        n = rd::kBlockSize;
+        engine.render(blockBuffer.data(), 1);
+        // Output stage of the original (left channel): volume as a fixed-point gain.
+        uint32_t gain = static_cast<uint32_t>(engine.params.volume) << 7;
+        if (gain <= 0x7f)
+            std::fill(blockBuffer.begin(), blockBuffer.end(), int16_t{0});
+        else
+            rd::mix::applyGain(blockBuffer.data(), rd::kBlockSize, gain);
+    }
 
-    // Output stage of the original (left channel): volume as a fixed-point gain.
-    uint32_t gain = static_cast<uint32_t>(engine.params.volume) << 7;
-    if (gain <= 0x7f)
-        std::fill(blockBuffer.begin(), blockBuffer.end(), int16_t{0});
-    else
-        rd::mix::applyGain(blockBuffer.data(), rd::kBlockSize, gain);
+    for (unsigned i = 0; i < n; ++i)
+        fifo.push_back(static_cast<float>(blockBuffer[i]) * (1.0f / 32768.0f));
 
-    for (int16_t s : blockBuffer)
-        fifo.push_back(static_cast<float>(s) * (1.0f / 32768.0f));
-
-    playingStep.store(engine.isRunning() ? engine.currentStep() : -1);
-    playingPattern.store(engine.currentPatternIndex());
-    sequencerRunning.store(engine.isRunning());
+    const bool nowRunning = v1Active ? engineV1.isRunning() : engine.isRunning();
+    playingStep.store(nowRunning ? (v1Active ? engineV1.currentStep() : engine.currentStep()) : -1);
+    playingPattern.store(v1Active ? engineV1.currentPatternIndex() : engine.currentPatternIndex());
+    sequencerRunning.store(nowRunning);
 }
 
 void RubberDuckProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -286,6 +383,8 @@ void RubberDuckProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
             engine.patterns = sequence.patterns;
             engine.song = sequence.song;
             engine.songLength = std::max(1, sequence.songLength);
+            for (int i = 0; i < rd::kNumPatternsV1; ++i)
+                engineV1.patterns[static_cast<size_t>(i)] = sequence.patterns[static_cast<size_t>(i)];
             sequenceDirty.store(false);
         }
     }
@@ -304,6 +403,8 @@ void RubberDuckProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         startPending = true;
     wasPlaying = playing;
     engine.setTempo(static_cast<float>(bpm));
+    engineV1.setTempo(static_cast<float>(bpm));
+    lastBpm.store(static_cast<float>(bpm));
 
     for (const auto meta : midi)
         pendingMidi.push_back({hostSamplePos + meta.samplePosition, meta.getMessage()});
@@ -379,6 +480,43 @@ bool RubberDuckProcessor::importH30(const juce::File& file, juce::String& error)
     d.songLength = h30.songLength;
     setSequence(d);
 
+    // Files are played by the program that wrote them: versions 1-2 come from
+    // v1.02, later ones from v2.x. Parameters are read as that version's loader does.
+    const bool v1 = h30.version <= 2;
+    setParam(apvts, "engine", static_cast<float>(v1 ? EngineKind::V102 : EngineKind::V212));
+    if (v1) {
+        rd::EngineV1 e;
+        h30.applyTo(e);
+        setParam(apvts, "rangestart", static_cast<float>(juce::jlimit(0, rd::kNumPatternsV1 - 1, e.rangeStart)));
+        setParam(apvts, "rangeend", static_cast<float>(juce::jlimit(0, rd::kNumPatternsV1 - 1, e.rangeEnd)));
+        setParam(apvts, "pattern", static_cast<float>(1 + e.currentPatternIndex()));
+        if (h30.hasParams) {
+            const rd::ParamsV1& p = e.params;
+            setParam(apvts, "volume", static_cast<float>(p.volume));
+            setParam(apvts, "tune", static_cast<float>(p.tune));
+            setParam(apvts, "accent", static_cast<float>(p.accent));
+            if (p.osc1Type < 3)
+                setParam(apvts, "osc1", static_cast<float>(kOsc1FromV1[p.osc1Type]));
+            if (p.osc2Type < 3)
+                setParam(apvts, "osc2", static_cast<float>(p.osc2Type));
+            setParam(apvts, "osc2double", p.osc2Double ? 1.0f : 0.0f);
+            setParam(apvts, "mix", static_cast<float>(p.oscMix));
+            setParam(apvts, "cutoff", static_cast<float>(p.cutoff));
+            setParam(apvts, "attack", static_cast<float>(p.attack));
+            setParam(apvts, "decay", static_cast<float>(p.decay));
+            setParam(apvts, "modulation", static_cast<float>(p.modulation));
+            setParam(apvts, "resonance", static_cast<float>(p.resonance));
+            setParam(apvts, "distgain", static_cast<float>(p.distortionAmount & 0xff));
+            setParam(apvts, "distdrive", static_cast<float>(p.distortionCurve & 0xff));
+            setParam(apvts, "delaytime", static_cast<float>(p.delayTime));
+            setParam(apvts, "delaygain", static_cast<float>(p.delayGain));
+            setParam(apvts, "delayfeedback", static_cast<float>(p.delayFeedback));
+            setParam(apvts, "playmode", static_cast<float>(e.playMode));
+        }
+        snapSmoothing.store(true);
+        return true;
+    }
+
     if (h30.hasParams) {
         const rd::Params& p = h30.params;
         setParam(apvts, "tune", static_cast<float>(p.tune));
@@ -412,13 +550,45 @@ bool RubberDuckProcessor::importH30(const juce::File& file, juce::String& error)
 
 bool RubberDuckProcessor::exportH30(const juce::File& file) const
 {
-    rd::Engine snapshot;
     const SequenceData d = getSequence();
+    auto get = [this](const char* id) { return static_cast<int>(std::lround(apvts.getRawParameterValue(id)->load())); };
+    const int knob = tempoKnobFor(lastBpm.load());
+    rd::H30File h30;
+    if (getEngineKind() == EngineKind::V102) {
+        // Version 2, the v1.02 format.
+        rd::EngineV1 snapshot;
+        for (int i = 0; i < rd::kNumPatternsV1; ++i)
+            snapshot.patterns[static_cast<size_t>(i)] = d.patterns[static_cast<size_t>(i)];
+        snapshot.rangeStart = get("rangestart");
+        snapshot.rangeEnd = get("rangeend");
+        snapshot.playMode = static_cast<rd::PlayModeV1>(get("playmode"));
+        rd::ParamsV1& Q = snapshot.params;
+        Q.volume = get("volume");
+        Q.tune = get("tune");
+        Q.accent = get("accent");
+        Q.osc1Type = kOsc1ToV1[get("osc1") & 3];
+        Q.osc2Type = static_cast<uint8_t>(get("osc2"));
+        Q.osc2Double = get("osc2double");
+        Q.oscMix = get("mix");
+        Q.cutoff = get("cutoff");
+        Q.attack = get("attack");
+        Q.decay = get("decay");
+        Q.modulation = get("modulation");
+        Q.resonance = get("resonance");
+        Q.distortionAmount = get("distgain");
+        Q.distortionCurve = get("distdrive");
+        Q.delayTime = get("delaytime");
+        Q.delayGain = get("delaygain");
+        Q.delayFeedback = get("delayfeedback");
+        const auto bytes = h30.serialize(snapshot, knob);
+        return file.replaceWithData(bytes.data(), bytes.size());
+    }
+
+    rd::Engine snapshot;
     snapshot.patterns = d.patterns;
     snapshot.song = d.song;
     snapshot.songLength = d.songLength;
     rd::Params& P = snapshot.params;
-    auto get = [this](const char* id) { return static_cast<int>(std::lround(apvts.getRawParameterValue(id)->load())); };
     P.volume = get("volume");
     P.tune = get("tune");
     P.accent = get("accent");
@@ -441,8 +611,7 @@ bool RubberDuckProcessor::exportH30(const juce::File& file) const
     P.delayTime = get("delaytime");
     P.delayGain = get("delaygain");
     P.delayFeedback = get("delayfeedback");
-    rd::H30File h30;
-    const auto bytes = h30.serialize(snapshot, 128);
+    const auto bytes = h30.serialize(snapshot, knob);
     return file.replaceWithData(bytes.data(), bytes.size());
 }
 
@@ -474,7 +643,11 @@ void RubberDuckProcessor::setStateInformation(const void* data, int sizeInBytes)
     juce::MemoryBlock seq;
     const bool hasSequence = seq.fromBase64Encoding(xml->getStringAttribute("sequence"));
     xml->removeAttribute("sequence");
+    // Projects saved before the v1.02 engine existed keep sounding as v2.12.
+    const bool hasEngine = xml->getChildByAttribute("id", "engine") != nullptr;
     apvts.replaceState(juce::ValueTree::fromXml(*xml));
+    if (!hasEngine)
+        setParam(apvts, "engine", static_cast<float>(EngineKind::V212));
     snapSmoothing.store(true);
 
     const size_t expected = rd::kNumPatterns * rd::kStepsPerPattern * 2 + rd::kSongLength + sizeof(int32_t);

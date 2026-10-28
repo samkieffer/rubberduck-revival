@@ -1,5 +1,6 @@
 // rdcheck: verifies that this build renders every reference pattern exactly as
-// the original rdh3o.exe does, using hashes recorded from the original.
+// the original rdh3o.exe (or, for lines tagged "|v1", RUBDUCK.EXE v1.02) does,
+// using hashes recorded from the original.
 //
 //   rdcheck <installer content folder> [tests/reference_hashes.txt]
 #include <cstdint>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "rd/Engine.h"
+#include "rd/EngineV1.h"
 #include "rd/H30File.h"
 
 namespace {
@@ -49,11 +51,15 @@ int main(int argc, char** argv)
             continue;
         const uint64_t expected = std::stoull(line.substr(0, 16), nullptr, 16);
         std::string rel = line.substr(18);
-        // Optional play mode suffix: "<path>|<mode>".
+        // Optional suffixes: "<path>|<mode>" (v2.12 play mode), "<path>|v1".
         int mode = 0;
-        const auto bar = rel.rfind('|');
-        if (bar != std::string::npos) {
-            mode = std::atoi(rel.c_str() + bar + 1);
+        bool v1 = false;
+        for (auto bar = rel.rfind('|'); bar != std::string::npos; bar = rel.rfind('|')) {
+            const std::string tag = rel.substr(bar + 1);
+            if (tag == "v1")
+                v1 = true;
+            else
+                mode = std::atoi(tag.c_str());
             rel = rel.substr(0, bar);
         }
         rd::H30File file;
@@ -61,13 +67,22 @@ int main(int argc, char** argv)
             missing++;
             continue;
         }
-        rd::Engine engine;
-        file.applyTo(engine);
-        engine.playMode = static_cast<rd::PlayMode>(mode);
-        engine.setRunning(true);
+        // 384000 samples either way: 3000 blocks of 128 or 6000 of 64.
         std::vector<int16_t> out(3000 * rd::kBlockSize);
-        for (unsigned b = 0; b < 3000; b += 16)
-            engine.render(&out[b * rd::kBlockSize], 3000 - b < 16 ? 3000 - b : 16);
+        if (v1) {
+            rd::EngineV1 engine;
+            file.applyTo(engine);
+            engine.setRunning(true);
+            for (unsigned b = 0; b < 6000; b += 32)
+                engine.render(&out[b * rd::kBlockSizeV1], 6000 - b < 32 ? 6000 - b : 32);
+        } else {
+            rd::Engine engine;
+            file.applyTo(engine);
+            engine.playMode = static_cast<rd::PlayMode>(mode);
+            engine.setRunning(true);
+            for (unsigned b = 0; b < 3000; b += 16)
+                engine.render(&out[b * rd::kBlockSize], 3000 - b < 16 ? 3000 - b : 16);
+        }
         checked++;
         if (fnv1a(out) != expected) {
             failed++;

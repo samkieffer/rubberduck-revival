@@ -13,12 +13,14 @@ option(RD_BUILD_TOOLS "Build command-line tools" ON)
 add_library(rdcore STATIC
     core/src/Delay.cpp
     core/src/Engine.cpp
+    core/src/EngineV1.cpp
     core/src/H30File.cpp
     core/src/LadderFilter.cpp
     core/src/Mixing.cpp
     core/src/Shaper.cpp
     core/src/StateVariableFilter.cpp
-    core/src/Tables.cpp)
+    core/src/Tables.cpp
+    core/src/TablesV1.cpp)
 target_include_directories(rdcore PUBLIC core/include)
 if(MSVC)
     target_compile_options(rdcore PRIVATE /fp:precise)
@@ -39,6 +41,10 @@ if(RD_BUILD_TOOLS)
     # Synthetic patterns shipped with the repository, hashes recorded from the original.
     add_test(NAME bit_exact_fixtures
              COMMAND rdcheck "${CMAKE_SOURCE_DIR}/tests/fixtures" "${CMAKE_SOURCE_DIR}/tests/fixtures/hashes.txt")
+    # v1.02 engine: host-synchronised positions reproduce the free-running sequencer.
+    add_executable(engine_v1_sync tests/EngineV1SyncTest.cpp)
+    target_link_libraries(engine_v1_sync PRIVATE rdcore)
+    add_test(NAME engine_v1_sync COMMAND engine_v1_sync "${CMAKE_SOURCE_DIR}/tests/fixtures")
     # The installer's own patterns (not in the repository): -DRD_CONTENT_DIR=/path/to/content
     set(RD_CONTENT_DIR "${CMAKE_SOURCE_DIR}/reference/content" CACHE PATH "Original pattern files")
     if(EXISTS "${RD_CONTENT_DIR}/Acid_was_my_first_love.h30")

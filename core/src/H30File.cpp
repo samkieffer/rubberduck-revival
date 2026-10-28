@@ -74,8 +74,9 @@ bool H30File::parse(const uint8_t* data, size_t size, H30File& f, std::string* e
         for (auto& s : f.song) s = r.u8();
         patternCount = kNumPatterns;
     } else if (f.version < 3) {
-        r.i32();
-        f.songLength = r.i32() + 1;
+        f.rangeStart = r.i32();
+        f.rangeEnd = r.i32();
+        f.songLength = f.rangeEnd + 1;
         for (int i = 0; i < f.songLength && i < kSongLength; ++i)
             f.song[static_cast<size_t>(i)] = static_cast<uint8_t>(i);
         patternCount = 14;
@@ -96,10 +97,12 @@ bool H30File::parse(const uint8_t* data, size_t size, H30File& f, std::string* e
 
     Params& p = f.params;
     f.tempoKnob = r.i32();
-    r.i32();  // volume: saved, but the original loader skips it
+    f.volume = r.i32();  // saved, but the v2.12 loader skips it
     p.tune = r.i32();
     p.accent = r.i32();
     uint8_t osc1 = r.u8(), osc2 = r.u8();
+    f.osc1Raw = osc1;
+    f.osc2Raw = osc2;
     p.osc1Type = static_cast<uint8_t>(f.version == 3 ? osc1 + 1 : osc1);
     p.osc2Type = static_cast<uint8_t>(f.version == 2 ? osc2 + 1 : osc2);
     p.osc2Double = r.i32() != 0;
@@ -122,8 +125,8 @@ bool H30File::parse(const uint8_t* data, size_t size, H30File& f, std::string* e
     f.extra = r.i32();
     // The loader routes the first distortion field to "Drive" and the second to
     // "Gain", while the saver writes them the other way round.
-    p.distortionDrive = r.i32();
-    p.distortionGain = r.i32();
+    f.distortion1 = p.distortionDrive = r.i32();
+    f.distortion2 = p.distortionGain = r.i32();
     p.delayTime = r.i32();
     p.delayGain = r.i32();
     p.delayFeedback = r.i32();
@@ -164,6 +167,97 @@ void H30File::applyTo(Engine& e) const
     e.params = p;
     e.setTempoKnob(tempoKnob);
     e.resetSmoothing();
+}
+
+void H30File::applyTo(EngineV1& e) const
+{
+    for (int i = 0; i < kNumPatternsV1; ++i)
+        e.patterns[static_cast<size_t>(i)] = patterns[static_cast<size_t>(i)];
+    if (version < 3) {
+        e.rangeStart = rangeStart;
+        e.rangeEnd = rangeEnd;
+    } else {
+        // Song of a later version: its first pattern, or the range it spans.
+        int hi = 0;
+        for (int i = 0; i < songLength && i < kSongLength; ++i)
+            if (song[static_cast<size_t>(i)] < kNumPatternsV1 && song[static_cast<size_t>(i)] > hi)
+                hi = song[static_cast<size_t>(i)];
+        e.rangeStart = 0;
+        e.rangeEnd = hi;
+    }
+    e.selectPattern(version < 3 ? rangeStart : (song[0] < kNumPatternsV1 ? song[0] : 0));
+    if (!hasParams) {
+        e.reset();
+        return;
+    }
+    ParamsV1& p = e.params;
+    p.tune = params.tune;
+    p.accent = params.accent;
+    p.osc2Double = params.osc2Double;
+    p.oscMix = params.oscMix;
+    p.cutoff = params.cutoff;
+    p.attack = params.attack;
+    p.decay = params.decay;
+    p.modulation = params.modulation;
+    p.resonance = params.resonance;
+    p.delayTime = params.delayTime;
+    p.delayGain = params.delayGain;
+    p.delayFeedback = params.delayFeedback;
+    if (version == 2) {
+        p.volume = volume;
+        p.osc1Type = osc1Raw;
+        p.osc2Type = osc2Raw;
+        p.distortionAmount = distortion1;
+        p.distortionCurve = distortion2;
+        if (extra >= 0 && extra <= 2)
+            e.playMode = static_cast<PlayModeV1>(extra);
+    } else {
+        // v2.12 numbering: triangle has no v1.02 counterpart and plays as saw.
+        static const uint8_t kOsc1[4] = {1, 0, 1, 2};
+        p.osc1Type = version == 3 ? osc1Raw : kOsc1[params.osc1Type & 3];
+        p.osc2Type = params.osc2Type;
+        p.distortionAmount = params.distortionGain;
+        p.distortionCurve = params.distortionDrive;
+    }
+    e.setTempoKnob(tempoKnob);
+    e.reset();
+}
+
+std::vector<uint8_t> H30File::serialize(const EngineV1& e, int tempoKnobValue) const
+{
+    std::vector<uint8_t> out;
+    out.push_back(static_cast<uint8_t>(sizeof(kSignature) - 1));
+    out.insert(out.end(), kSignature, kSignature + sizeof(kSignature) - 1);
+    writeI32(out, 2);
+    writeI32(out, e.rangeStart);
+    writeI32(out, e.rangeEnd);
+    for (const auto& pat : e.patterns)
+        for (const auto& st : pat.steps) {
+            out.push_back(static_cast<uint8_t>(st.note));
+            writeI32(out, st.accent);
+            writeI32(out, st.slide);
+        }
+    const ParamsV1& p = e.params;
+    writeI32(out, tempoKnobValue);
+    writeI32(out, p.volume);
+    writeI32(out, p.tune);
+    writeI32(out, p.accent);
+    out.push_back(p.osc1Type);
+    out.push_back(p.osc2Type);
+    writeI32(out, p.osc2Double);
+    writeI32(out, p.oscMix);
+    writeI32(out, p.cutoff);
+    writeI32(out, p.attack);
+    writeI32(out, p.decay);
+    writeI32(out, p.modulation);
+    writeI32(out, p.resonance);
+    writeI32(out, static_cast<int32_t>(e.playMode));
+    writeI32(out, p.distortionAmount);
+    writeI32(out, p.distortionCurve);
+    writeI32(out, p.delayTime);
+    writeI32(out, p.delayGain);
+    writeI32(out, p.delayFeedback);
+    return out;
 }
 
 std::vector<uint8_t> H30File::serialize(const Engine& e, int tempoKnobValue) const

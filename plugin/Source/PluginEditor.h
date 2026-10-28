@@ -47,6 +47,7 @@ private:
     void loadFile();
     void saveFile();
     void layoutKnobs(juce::Rectangle<int> area, std::initializer_list<juce::Component*> items);
+    void updateEngineControls();
 
     RubberDuckProcessor& processor;
     juce::LookAndFeel_V4 lookAndFeel;
@@ -62,6 +63,7 @@ private:
     std::vector<Section> sections;
     int shownPattern = -1;
     int shownPlaying = -1;
+    int shownEngine = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RubberDuckEditor)
 };

@@ -1,14 +1,15 @@
 # Rubber Duck Revival — notes for Claude
 
-Goal: faithful re-implementation of d-lusion's Rubber Duck H3O+ v2.12 (Win32, 2000) as an
-AU/VST3/Standalone plugin for macOS (Apple Silicon), primarily used in Ableton Live 12.
+Goal: faithful re-implementation of d-lusion's Rubber Duck H3O+ as an AU/VST3/Standalone
+plugin for macOS (Apple Silicon), primarily used in Ableton Live 12. Two engines: v2.12
+(Win32, 2000, `rd::Engine`) and v1.02 (RUBDUCK.EXE, 1997, `rd::EngineV1`, a different voice).
 
 Fidelity to the original sound is the top priority. The engine is re-derived from the
 decompiled original (see `docs/reverse-engineering.md`), not designed from scratch: when
 in doubt, match what the original code does, including its integer/fixed-point quirks.
 
 ## Layout
-- `core/`   portable C++17 engine, no dependencies, runs internally at 44.1 kHz like the original.
+- `core/`   portable C++17 engines, no dependencies, run internally at 44.1 kHz like the originals.
 - `tools/`  CLI tools (render `.h30` to WAV, A/B comparison).
 - `plugin/` JUCE wrapper (AU, VST3, Standalone).
 - `docs/`   reverse-engineering notes.
@@ -25,4 +26,5 @@ in doubt, match what the original code does, including its integer/fixed-point q
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release -j`
 - `rdcheck tests/fixtures tests/fixtures/hashes.txt` must report 0 mismatches on every platform;
   if it fails on macOS/arm64, suspect FMA contraction or libm differences (sin/log/exp).
-- The oracle (tools/oracle) needs Wine, mingw-w64 (i686) and the original rdh3o.exe in reference/.
+- The oracles (tools/oracle) need Wine, mingw-w64 (i686) and the original rdh3o.exe / RUBDUCK.EXE
+  in reference/ (`oracle.exe` for v2.12, `oracle_v1.exe` for v1.02).

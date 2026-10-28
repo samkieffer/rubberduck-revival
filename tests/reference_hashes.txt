@@ -112,3 +112,34 @@ cf706bd2b1f3be3e  CuBiCO Collection/CuE_Weird2.h30
 41d57f47d938b0fe  CuBiCO Collection/CuE_Weird2X.h30
 8e2954e347194bd9  CuBiCO Collection/CuE_Weird2Y.h30
 8154f2f0a57ee54b  CuBiCO Collection/CuE_Weird2YX.h30
+# v1.02 engine (RUBDUCK.EXE, "|v1"): version 1-2 files, 6000 blocks of 64 samples.
+3dc1a6230a0830db  80'$$$.h30|v1
+72ccf456e8e4fc9d  Blast1.h30|v1
+197833cfd237bde7  Blast2.h30|v1
+82e984b698f514eb  Blast3.h30|v1
+53f7c6414ec92189  CANON1.H30|v1
+1566a6d109cee373  Commerda$$$.h30|v1
+b187650697588c53  CuE_CHEA.H30|v1
+89b7c7795a436b83  CuE_CuBi.h30|v1
+1db23c17bc822971  CuE_OnTh.H30|v1
+e2c6bee1d37273ff  DJSeemoD-Lay$$$.h30|v1
+0c05ea164eca6312  GOALINE1.H30|v1
+a7c4ddb463044509  GOALINE2.H30|v1
+0ad755d032c6fa30  GOALINE5.H30|v1
+d7d7526745fd17ed  Mello7.h30|v1
+1169a872698812a0  Paradise303.h30|v1
+1169a872698812a0  Paradise3031.h30|v1
+e233a487a613404e  RD-Tune5.H30|v1
+51a57db03b4aad58  Realms.h30|v1
+13d821ca40ce725f  Sadness.h30|v1
+2c4121cd99bbcfdb  Sin-patica$$$.h30|v1
+59ddd9535ace14a2  TOOFUNKY.H30|v1
+2377a5c9ddc46a8f  Trancefiguration.H30|v1
+a7d83e2458595b2b  TSB01.H30|v1
+a7d83e2458595b2b  TSB011.H30|v1
+418e7dce6517bb63  CuBiCO Collection/CuE_BoMbDroppiN.H30|v1
+b187650697588c53  CuBiCO Collection/CuE_CHEAP.H30|v1
+89b7c7795a436b83  CuBiCO Collection/CuE_CuBiCo.h30|v1
+7569bea94935ee66  CuBiCO Collection/CuE_HiGH.H30|v1
+a3c0a7bcbfb209a4  CuBiCO Collection/CuE_Originz.h30|v1
+c8284a3c2c0b9418  CuBiCO Collection/CuE_SQUARE.H30|v1

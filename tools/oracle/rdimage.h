@@ -7,7 +7,8 @@
 #define RD_ADDR_MALLOC      0x0041adb6u
 #define RD_ADDR_FREE        0x0041a65bu
 
-int rd_load(const char *path);
+int rd_load(const char *path);     // rdh3o.exe v2.12
+int rd_load_v1(const char *path);  // RUBDUCK.EXE v1.02 (SHA-256 69e95278...77e1)
 void rd_srand(unsigned seed);
 int __cdecl rd_rand(void);
 void rd_patch_jump(unsigned long from, void *to);

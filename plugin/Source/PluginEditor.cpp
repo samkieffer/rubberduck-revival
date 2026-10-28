@@ -1,5 +1,7 @@
 #include "PluginEditor.h"
 
+#include <cstring>
+
 namespace {
 
 const juce::Colour kBackground(0xff15171b);
@@ -8,7 +10,7 @@ const juce::Colour kText(0xffe6e6e6);
 const juce::Colour kDim(0xff8a8f99);
 const juce::Colour kAcid(0xffffb000);
 
-constexpr int kWidth = 920;
+constexpr int kWidth = 1000;
 constexpr int kHeight = 600;
 
 } // namespace
@@ -46,6 +48,9 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     addKnob("distgain", "Dist Gain");
     addKnob("distdrive", "Dist Drive");
     addKnob("volume", "Volume");
+    addChoice("engine", "Engine");
+    addChoice("rangestart", "Range from");
+    addChoice("rangeend", "Range to");
     addChoice("playmode", "Play mode");
     addChoice("source", "Source");
     addChoice("quantize", "Pattern change");
@@ -158,8 +163,45 @@ void RubberDuckEditor::saveFile()
                          });
 }
 
+void RubberDuckEditor::updateEngineControls()
+{
+    // v1.02 has no Squelch/Drive filter branch, no triangle and 14 patterns;
+    // its sequence modes play a pattern range instead of the song.
+    const bool v1 = processor.getEngineKind() == RubberDuckProcessor::EngineKind::V102;
+    auto enable = [this](const char* id, bool on) {
+        for (auto& k : knobs)
+            if (k->slider.getComponentID() == id) {
+                k->slider.setEnabled(on);
+                k->label.setEnabled(on);
+            }
+        for (auto& t : toggles)
+            if (t->button.getComponentID() == id)
+                t->button.setEnabled(on);
+        for (auto& c : choices)
+            if (c->box.getComponentID() == id) {
+                c->box.setEnabled(on);
+                c->label.setEnabled(on);
+            }
+    };
+    for (const char* id : {"squelch", "drive", "modification", "tweak", "tweet"})
+        enable(id, !v1);
+    for (const char* id : {"rangestart", "rangeend"})
+        enable(id, v1);
+    for (auto& c : choices)
+        if (c->box.getComponentID() == "osc1")
+            c->box.setItemEnabled(1, !v1);
+    for (int i = 0; i < rd::kNumPatterns; ++i)
+        patternButtons[static_cast<size_t>(i)].setEnabled(i < processor.numPatterns());
+    repaint();
+}
+
 void RubberDuckEditor::timerCallback()
 {
+    const int engineKind = static_cast<int>(processor.getEngineKind());
+    if (engineKind != shownEngine) {
+        shownEngine = engineKind;
+        updateEngineControls();
+    }
     const int selected = stepEditor.getPatternIndex();
     const int playing = processor.isSequencerRunning() ? processor.getPlayingPattern() : -1;
     if (selected != shownPattern || playing != shownPlaying) {
@@ -182,6 +224,10 @@ void RubberDuckEditor::paint(juce::Graphics& g)
     g.setColour(kText);
     g.setFont(juce::FontOptions(16.0f));
     g.drawText("revival", 168, 12, 100, 26, juce::Justification::centredLeft);
+    g.setColour(kDim);
+    g.setFont(juce::FontOptions(12.0f));
+    g.drawText(processor.getEngineKind() == RubberDuckProcessor::EngineKind::V102 ? "1997 engine" : "2000 engine", 168, 30,
+               100, 14, juce::Justification::centredLeft);
 
     for (const auto& s : sections) {
         g.setColour(kPanel);
@@ -223,13 +269,13 @@ void RubberDuckEditor::resized()
     auto area = getLocalBounds().reduced(12);
 
     auto header = area.removeFromTop(40);
-    header.removeFromLeft(260);
+    header.removeFromLeft(240);
     saveButton.setBounds(header.removeFromRight(90).reduced(2, 6));
     loadButton.setBounds(header.removeFromRight(90).reduced(2, 6));
-    for (const char* id : {"quantize", "source", "playmode"}) {
+    for (const char* id : {"quantize", "source", "playmode", "engine"}) {
         for (auto& c : choices)
             if (c->box.getComponentID() == id) {
-                auto cell = header.removeFromRight(150);
+                auto cell = header.removeFromRight(std::strcmp(id, "engine") == 0 ? 150 : 130);
                 c->label.setBounds(cell.removeFromTop(14).translated(0, -2));
                 c->box.setBounds(cell.reduced(2, 2));
             }
@@ -254,8 +300,8 @@ void RubberDuckEditor::resized()
     auto env = top.reduced(4, 0);
     sections.push_back({"ENVELOPE", env});
 
-    auto osc = bottom.removeFromLeft(bottom.getWidth() * 40 / 100).reduced(4, 0);
-    auto fx = bottom.removeFromLeft(bottom.getWidth() * 80 / 100).reduced(4, 0);
+    auto osc = bottom.removeFromLeft(bottom.getWidth() * 34 / 100).reduced(4, 0);
+    auto fx = bottom.removeFromLeft(bottom.getWidth() * 61 / 100).reduced(4, 0);
     auto master = bottom.reduced(4, 0);
     sections.push_back({"OSCILLATORS", osc});
     sections.push_back({"EFFECTS", fx});
@@ -292,5 +338,17 @@ void RubberDuckEditor::resized()
         layoutKnobs(r, {find("mix"), find("tune")});
     }
     layoutKnobs(inner(fx), {find("delaytime"), find("delaygain"), find("delayfeedback"), find("distgain"), find("distdrive")});
-    layoutKnobs(inner(master), {find("volume")});
+    {
+        auto r = inner(master);
+        auto ranges = r.removeFromRight(r.getWidth() * 55 / 100).reduced(4, 0);
+        layoutKnobs(r, {find("volume")});
+        const int h = ranges.getHeight() / 2;
+        for (const char* id : {"rangestart", "rangeend"})
+            for (auto& c : choices)
+                if (c->box.getComponentID() == id) {
+                    auto cell = ranges.removeFromTop(h);
+                    c->label.setBounds(cell.removeFromTop(16));
+                    c->box.setBounds(cell.removeFromTop(26));
+                }
+    }
 }
