@@ -49,3 +49,8 @@ e9c0071005999e5c  v1_synthetic_21.h30|v1
 df51a822984adf2c  v1_synthetic_22.h30|v1
 612a6cdafb3aac99  v1_synthetic_23.h30|v1
 1ca654871a765993  v1_synthetic_24.h30|v1
+# Machine states made by the project owner with the original v1.02 (added at their request), v1.02 engine.
+d4dbd74c61769799  user_bass.h30|v1
+fc2658802d6ecf2b  user_bis.h30|v1
+26098cd1727e3dc8  user_samflute2.h30|v1
+3c215367ec16dd9c  user_samflute3.h30|v1

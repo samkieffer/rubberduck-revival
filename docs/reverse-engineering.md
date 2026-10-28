@@ -286,8 +286,10 @@ centre pan into 128/256 (left) and 129/256 (right), then applies it as above.
 unresolved, `rand`/`_ftol`/`malloc`/`free` redirected through the import table)
 and drives the original voice with a mixer laid out like `0x405a10`:
 
-- every pattern file of the installer content folder (70) and 48 synthetic
-  files, 2000 blocks each, play mode and range from the file — 0 differing samples;
+- every pattern file of the installer content folder (70), 48 synthetic files
+  and 4 files made with the original v1.02 (`tests/fixtures/user_*.h30`),
+  2000 blocks each, play mode and range from the file — 0 differing samples
+  (the 4 user files also over 60 s with periods of 1 to 96 blocks);
 - randomised automation of every parameter, tempo and play mode, periods of
   1, 3, 8 and 32 blocks — 0 differing samples;
 - all 256 distortion tables, and the output stage (both channels, all volumes).

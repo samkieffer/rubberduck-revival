@@ -13,9 +13,14 @@ int main(int argc, char** argv)
 {
     const std::string dir = argc > 1 ? argv[1] : "tests/fixtures";
     int failures = 0;
+    std::vector<std::string> names = {"user_bass.h30", "user_bis.h30", "user_samflute2.h30", "user_samflute3.h30"};
     for (int n = 1; n <= 24; ++n) {
-        char base[32];
-        std::snprintf(base, sizeof base, "v1_synthetic_%02d.h30", n);
+        char name[32];
+        std::snprintf(name, sizeof name, "v1_synthetic_%02d.h30", n);
+        names.push_back(name);
+    }
+    for (const auto& name : names) {
+        const char* base = name.c_str();
         rd::H30File f;
         if (!rd::H30File::load(dir + "/" + base, f)) {
             std::printf("cannot load %s/%s\n", dir.c_str(), base);
