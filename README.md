@@ -61,7 +61,7 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
 
 ## Utilisation dans Ableton Live
 
-- **Moteur** (*Engine*) : v1.02 (par défaut pour une nouvelle instance) ou v2.12. Les
+- **Moteur** (segment `ENG` de la fenêtre de configuration, en haut) : v1.02 (par défaut pour une nouvelle instance) ou v2.12. Les
   réglages sont communs ; ceux qui n'existent pas en v1.02 (Squelch, Drive, m, Tweak,
   Tweet, onde triangle, patterns E et F) sont grisés. En v1.02, *Dist Gain* règle la
   part de distorsion et *Dist Drive* la courbe. Les projets enregistrés avant l'ajout du
@@ -76,18 +76,19 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
   - ou notes MIDI **C2 à D#3** dans un clip (C2 = pattern 0, … D#3 = pattern F) ;
   - ou Program Change 0–15.
   Le changement se fait à la mesure suivante, au pas suivant ou immédiatement
-  (réglage *Pattern change*). *Play mode* reprend les modes Single / Sequence / Shuffle
-  de l'original : en v2.12, enchaînement des patterns du « song » chargé ; en v1.02,
-  patterns de *Range from* à *Range to*, dans l'ordre ou au hasard.
-- **Jouer au clavier ou depuis des clips MIDI** : *Source = MIDI notes*. Vélocité ≥ 100
+  (segment `NEXT BAR` / `NEXT STEP` / `IMMEDIATE` de la fenêtre de configuration). Le
+  mode de lecture (`SINGLE` / `SEQUENCE` / `SHUFFLE`) reprend ceux de l'original : en
+  v2.12, enchaînement des patterns du « song » chargé ; en v1.02, patterns de la plage
+  *SEQ RANGE* (à droite des patterns, « 0 → 1 »), dans l'ordre ou au hasard.
+- **Jouer au clavier ou depuis des clips MIDI** : source `MIDI NOTES`. Vélocité ≥ 100
   = accent, notes liées (legato) = slide. MIDI C1 correspond à la note « C-4 » des patterns.
 - **Éditeur de pas** : glisser verticalement ou molette sur une note pour la changer,
-  double-clic pour silence/note, clic droit pour « Note off », octave, effacer ;
-  `AC` = accent, `SL` = slide.
-- **Saisie au clavier** (façon tracker) : cliquer une note pour y placer le curseur, puis
+  double-clic pour silence/note, clic droit pour « Note off », octave, effacer ; un
+  clic sur les LED *ACCENT* et *SLIDE* les bascule.
+- **Saisie au clavier** (façon tracker) : cliquer une note ou une touche *STEP* pour y placer le curseur, puis
   taper. Les touches sont prises à leur *position* (même place en AZERTY et en QWERTY) :
   rangée du bas (Z S X D C V G B N H J M en QWERTY, W S X D C V G B N H J , en AZERTY)
-  = octave choisie par *Keys Oct*, rangée du haut (Q 2 W 3 E… / A é Z " E…) = octave
+  = octave choisie par *KEY OCT*, rangée du haut (Q 2 W 3 E… / A é Z " E…) = octave
   au-dessus. Touche 1 (`&`) = note off, Retour arrière = silence, A (`Q` en AZERTY) =
   accent, F = slide, flèches = déplacer le curseur. L'infobulle de la grille rappelle les
   touches de la disposition active. Dans Live, désactiver le clavier MIDI de l'ordinateur
@@ -99,20 +100,23 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
 - **Exporter en clip MIDI** : glisser le bouton *Drag MIDI* sur une piste MIDI de Live
   (ou dans un clip slot) donne le pattern affiché (ou la paire en 32 pas) comme clip ;
   un simple clic enregistre un `.mid`. Le clip est écrit pour que le plugin, en
-  *Source = MIDI notes*, rejoue la même ligne : C-4 = MIDI C1, accent = vélocité 120,
+  source `MIDI NOTES`, rejoue la même ligne : C-4 = MIDI C1, accent = vélocité 120,
   slide = note qui chevauche la précédente, les silences laissent sonner la note,
   « OFF » la termine. Testé : rejoué par le plugin, le clip redonne exactement les mêmes
   échantillons que le séquenceur (v2.12), à −78 dB près (v1.02).
-- **32 pas** : en mode *Single*, le pattern choisi est joué avec son voisin (0+1, 2+3…),
+- **32 pas** (interrupteur *STEPS 16 / 32*) : en mode *Single*, le pattern choisi est joué avec son voisin (0+1, 2+3…),
   un par mesure, calé sur les mesures impaires/paires de Live ; les deux sont affichés
   l'un sous l'autre. Les fichiers `.h30` restent au format d'origine (deux patterns) et
   le son est identique à celui de l'original jouant ces deux patterns à la suite.
-- **Fichiers** : *Load .h30* charge une sauvegarde de l'original (patterns + réglages)
+- **Fichiers** : *LOAD* charge une sauvegarde de l'original (patterns + réglages)
   et choisit le moteur qui l'a écrite (fichiers de version 1–2 : v1.02, versions 3–4 :
   v2.12). Pendant la lecture, le plugin passe aussitôt au pattern de départ du fichier,
-  sans attendre la mesure. *Save .h30* écrit un fichier relisible par l'original du
+  sans attendre la mesure. *SAVE* écrit un fichier relisible par l'original du
   moteur choisi.
-- **Version** : affichée sous le titre (`v0.3.0`…), pour savoir quelle compilation Live a chargée.
+- **Thème et version** : un clic sur le canard (en haut à gauche) choisit le thème sombre ou
+  clair (réglage commun à toutes les instances, gardé dans
+  `~/Library/Application Support/Rubber Duck Revival`) et affiche la version (`0.4.0`…),
+  pour savoir quelle compilation Live a chargée.
 - **Fréquence d'échantillonnage** : exacte à 44,1 kHz. À 48 kHz ou plus, le signal est
   rééchantillonné (latence de quelques échantillons, compensée par Live).
 
