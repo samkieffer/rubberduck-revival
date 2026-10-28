@@ -280,6 +280,26 @@ void StepEditor::copy()
         clip.push_back(data.patterns[static_cast<size_t>(first + r)]);
 }
 
+std::vector<rd::Pattern> StepEditor::shownPatterns() const
+{
+    const auto sequence = processor.getSequence();
+    const int first = numRows() == 2 ? (patternIndex & ~1) : patternIndex;
+    std::vector<rd::Pattern> patterns;
+    for (int r = 0; r < numRows(); ++r)
+        patterns.push_back(sequence.patterns[static_cast<size_t>(first + r)]);
+    return patterns;
+}
+
+juce::String StepEditor::shownName() const
+{
+    static const char* names = "0123456789ABCDEF";
+    const int first = numRows() == 2 ? (patternIndex & ~1) : patternIndex;
+    juce::String name = juce::String::charToString(static_cast<juce::juce_wchar>(names[first]));
+    if (numRows() == 2)
+        name << "+" << juce::String::charToString(static_cast<juce::juce_wchar>(names[first + 1]));
+    return name;
+}
+
 bool StepEditor::canPaste() const
 {
     return !clipboard().empty();

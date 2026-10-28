@@ -96,6 +96,13 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
   tous les pas d'un cran en boucle (⇧← ⇧→), *Transpose* −12 −1 +1 +12 (⇧↑ ⇧↓ pour le
   demi-ton, ⌥↑ ⌥↓ pour l'octave ; refusé si une note sortait de la tessiture),
   *Undo* / *Redo* (⌘Z, ⇧⌘Z), *Copy* / *Paste* (⌘C, ⌘V, aussi d'une instance à l'autre).
+- **Exporter en clip MIDI** : glisser le bouton *Drag MIDI* sur une piste MIDI de Live
+  (ou dans un clip slot) donne le pattern affiché (ou la paire en 32 pas) comme clip ;
+  un simple clic enregistre un `.mid`. Le clip est écrit pour que le plugin, en
+  *Source = MIDI notes*, rejoue la même ligne : C-4 = MIDI C1, accent = vélocité 120,
+  slide = note qui chevauche la précédente, les silences laissent sonner la note,
+  « OFF » la termine. Testé : rejoué par le plugin, le clip redonne exactement les mêmes
+  échantillons que le séquenceur (v2.12), à −78 dB près (v1.02).
 - **32 pas** : en mode *Single*, le pattern choisi est joué avec son voisin (0+1, 2+3…),
   un par mesure, calé sur les mesures impaires/paires de Live ; les deux sont affichés
   l'un sous l'autre. Les fichiers `.h30` restent au format d'origine (deux patterns) et
@@ -105,7 +112,7 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
   v2.12). Pendant la lecture, le plugin passe aussitôt au pattern de départ du fichier,
   sans attendre la mesure. *Save .h30* écrit un fichier relisible par l'original du
   moteur choisi.
-- **Version** : affichée sous le titre (`v0.2.0`…), pour savoir quelle compilation Live a chargée.
+- **Version** : affichée sous le titre (`v0.3.0`…), pour savoir quelle compilation Live a chargée.
 - **Fréquence d'échantillonnage** : exacte à 44,1 kHz. À 48 kHz ou plus, le signal est
   rééchantillonné (latence de quelques échantillons, compensée par Live).
 

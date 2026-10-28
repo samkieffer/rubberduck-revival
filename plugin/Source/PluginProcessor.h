@@ -26,6 +26,10 @@ public:
     enum class Quantize { NextBar = 0, NextStep = 1, Immediate = 2 };
     // Choice parameter "engine", in chronological order.
     enum class EngineKind { V102 = 0, V212 = 1 };
+    // Live playing (Source = MIDI notes): MIDI 24 (C1) is pattern note 48
+    // ("C-4"); velocities from 100 play accented, overlapping notes slide.
+    static constexpr int kMidiToPatternNote = 24;
+    static constexpr int kAccentVelocity = 100;
 
     RubberDuckProcessor();
     ~RubberDuckProcessor() override = default;
@@ -63,6 +67,7 @@ public:
     int getPlayingStep() const { return playingStep.load(); }
     int getPlayingPattern() const { return playingPattern.load(); }
     bool isSequencerRunning() const { return sequencerRunning.load(); }
+    float getHostBpm() const { return lastBpm.load(); }
     EngineKind getEngineKind() const { return static_cast<EngineKind>(paramInt(pEngine)); }
     int numPatterns() const { return getEngineKind() == EngineKind::V102 ? rd::kNumPatternsV1 : rd::kNumPatterns; }
     // 32-step patterns: in Single mode the selected pattern plays with its pair

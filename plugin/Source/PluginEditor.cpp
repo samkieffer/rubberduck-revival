@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "MidiExport.h"
+
 namespace {
 
 const juce::Colour kBackground(0xff15171b);
@@ -15,6 +17,28 @@ constexpr int kWidth = 1000;
 constexpr int kHeight = 634;  // with a single row of steps
 
 } // namespace
+
+void MidiDragButton::mouseDown(const juce::MouseEvent& e)
+{
+    dragged = false;
+    TextButton::mouseDown(e);
+}
+
+void MidiDragButton::mouseDrag(const juce::MouseEvent& e)
+{
+    if (dragged || e.getDistanceFromDragStart() < 6 || !makeFile)
+        return;
+    dragged = true;
+    const auto file = makeFile();
+    if (file.existsAsFile())
+        juce::DragAndDropContainer::performExternalDragDropOfFiles({file.getFullPathName()}, false, this);
+}
+
+void MidiDragButton::clicked()
+{
+    if (!dragged && onPlainClick)
+        onPlainClick();
+}
 
 RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     : AudioProcessorEditor(&p), processor(p), stepEditor(p)
@@ -94,11 +118,18 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     redoButton.setTooltip("Redo (Cmd+Shift+Z)");
     copyButton.setTooltip("Copy the shown pattern(s) (Cmd+C)");
     pasteButton.setTooltip("Paste (Cmd+V)");
+    midiButton.makeFile = [this] {
+        const auto name = "Rubber Duck " + stepEditor.shownName();
+        return midiexport::writeTemporary(
+            midiexport::fromPatterns(stepEditor.shownPatterns(), processor.getHostBpm(), name), name);
+    };
+    midiButton.onPlainClick = [this] { saveMidi(); };
+    midiButton.setTooltip("Drag onto a Live MIDI track to get the shown pattern(s) as a clip; click to save a .mid file");
     entryOctaveLabel.setJustificationType(juce::Justification::centred);
     entryOctaveLabel.setColour(juce::Label::textColourId, kText);
     entryOctaveLabel.setTooltip("Octave of the lower row of note keys");
     for (auto* b : {&shiftLeft, &shiftRight, &octaveDown, &semitoneDown, &semitoneUp, &octaveUp, &undoButton, &redoButton,
-                    &copyButton, &pasteButton, &entryOctaveDown, &entryOctaveUp}) {
+                    &copyButton, &pasteButton, &entryOctaveDown, &entryOctaveUp, static_cast<juce::TextButton*>(&midiButton)}) {
         b->setWantsKeyboardFocus(false);
         addAndMakeVisible(*b);
     }
@@ -203,6 +234,26 @@ void RubberDuckEditor::saveFile()
                              if (!file.hasFileExtension("h30"))
                                  file = file.withFileExtension("h30");
                              processor.exportH30(file);
+                         });
+}
+
+void RubberDuckEditor::saveMidi()
+{
+    const auto name = "Rubber Duck " + stepEditor.shownName();
+    chooser = std::make_unique<juce::FileChooser>("Save the pattern as MIDI",
+                                                  juce::File::getSpecialLocation(juce::File::userHomeDirectory)
+                                                      .getChildFile(name + ".mid"),
+                                                  "*.mid");
+    chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+                         [this, name](const juce::FileChooser& fc) {
+                             auto file = fc.getResult();
+                             if (file == juce::File())
+                                 return;
+                             if (!file.hasFileExtension("mid"))
+                                 file = file.withFileExtension("mid");
+                             file.deleteFile();
+                             juce::FileOutputStream out(file);
+                             midiexport::fromPatterns(stepEditor.shownPatterns(), processor.getHostBpm(), name).writeTo(out);
                          });
 }
 
@@ -373,7 +424,8 @@ void RubberDuckEditor::resized()
         };
         group("SHIFT", 44, {&shiftLeft, &shiftRight}, 34);
         group("TRANSPOSE", 74, {&octaveDown, &semitoneDown, &semitoneUp, &octaveUp}, 40);
-        group("EDIT", 40, {&undoButton, &redoButton, &copyButton, &pasteButton}, 56);
+        group("EDIT", 40, {&undoButton, &redoButton, &copyButton, &pasteButton}, 52);
+        midiButton.setBounds(bar.removeFromLeft(88).reduced(2, 0));
         if (auto* length = find("length32"))
             length->setBounds(bar.removeFromRight(86).reduced(2, 0));
         bar.removeFromRight(14);

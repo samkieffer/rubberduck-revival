@@ -7,6 +7,7 @@
 #include <cstdio>
 
 #include "../plugin/Source/KeyLayout.h"
+#include "../plugin/Source/MidiExport.h"
 #include "../plugin/Source/PluginProcessor.h"
 #include "../plugin/Source/StepEditor.h"
 #include "rd/EngineV1.h"
@@ -468,6 +469,60 @@ int main(int argc, char** argv)
         setParam(p, "engine", 0.0f);
         setParam(p, "playmode", 1.0f);
         settle("4-pairs-v102-sequence.png");
+    }
+
+    // 16. MIDI export of the default line: pitches as replayed in MIDI mode,
+    //     accents loud, slides legato, rests ring on, one bar per pattern.
+    {
+        RubberDuckProcessor p;
+        const auto patterns = std::vector<rd::Pattern>{p.getSequence().patterns[0], p.getSequence().patterns[1]};
+        const auto midi = midiexport::fromPatterns(patterns, 127.0, "test");
+        const auto& track = *midi.getTrack(0);
+        struct Note { int pitch, velocity; double on, off; };
+        std::vector<Note> notes;
+        for (int i = 0; i < track.getNumEvents(); ++i)
+            if (const auto& m = track.getEventPointer(i)->message; m.isNoteOn())
+                notes.push_back({m.getNoteNumber(), m.getVelocity(), m.getTimeStamp(), track.getTimeOfMatchingKeyUp(i)});
+        constexpr int T = midiexport::kTicksPerStep;
+        check(notes.size() == 28 && notes[0].pitch == 24 && notes[0].velocity >= RubberDuckProcessor::kAccentVelocity
+                  && notes[1].velocity < RubberDuckProcessor::kAccentVelocity,
+              "MIDI export: notes, pitches and accents");
+        check(notes[2].pitch == 36 && notes[2].on == 2 * T && notes[1].off > notes[2].on, "MIDI export: slide overlaps");
+        check(notes[3].on == 3 * T && notes[2].off == 3 * T && notes[3].off == 5 * T, "MIDI export: rests ring on");
+        check(notes.back().off == 32 * T && track.getEndTime() == 32 * T, "MIDI export: two patterns make two bars");
+
+        // Replayed through the plugin in MIDI mode, the clip gives back the sequencer's line.
+        for (const float engineKind : {0.0f, 1.0f}) {
+            auto render = [&](bool fromMidi) {
+                RubberDuckProcessor r;
+                FakeHost host;
+                r.setPlayHead(&host);
+                setParam(r, "engine", engineKind);
+                if (fromMidi)
+                    setParam(r, "source", 1.0f);
+                r.prepareToPlay(44100, 128);
+                const double samplesPerTick = 44100.0 * 60.0 / host.bpm / midiexport::kTicksPerQuarter;
+                return run(r, host, 4.0, 128, [&](juce::MidiBuffer& mb, int64_t t) {
+                    if (!fromMidi)
+                        return;
+                    for (int i = 0; i < track.getNumEvents(); ++i) {
+                        const auto& m = track.getEventPointer(i)->message;
+                        const auto at = static_cast<int64_t>(std::llround(m.getTimeStamp() * samplesPerTick));
+                        if ((m.isNoteOn() || m.isNoteOff()) && at >= t && at < t + 128)
+                            mb.addEvent(m, static_cast<int>(at - t));
+                    }
+                });
+            };
+            const auto seq = render(false), clip = render(true);
+            double num = 0, den = 0;
+            for (size_t i = 0; i < seq.size(); ++i) {
+                num += (seq[i] - clip[i]) * (seq[i] - clip[i]);
+                den += seq[i] * seq[i];
+            }
+            // v2.12 replays sample for sample; v1.02 within -60 dB (live notes and
+            // the sequencer differ in tiny internal details there).
+            check(engineKind == 1.0f ? num == 0.0 : num / den < 1e-6, engineKind == 0.0f ? "v1.02: exported clip replays the line" : "exported clip replays the line");
+        }
     }
 
     std::printf("%d failure(s)\n", failures);

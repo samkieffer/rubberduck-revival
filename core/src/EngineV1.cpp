@@ -161,6 +161,9 @@ void EngineV1::noteOn(int note, bool accent, bool slide)
     live.accent = accent ? 1 : 0;
     live.slide = slide ? 1 : 0;
     liveNote = true;
+    // A note-off received earlier in the same block belongs to the previous
+    // note; applied after this one, it would release the new note at once.
+    liveOff = false;
 }
 
 void EngineV1::noteOff()

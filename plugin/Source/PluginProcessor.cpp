@@ -9,8 +9,8 @@
 
 namespace {
 
-constexpr int kAccentVelocity = 100;      // MIDI notes at or above play accented
-constexpr int kMidiToPatternNote = 24;    // MIDI 24 (C1) = pattern note 48 ("C-4")
+constexpr int kAccentVelocity = RubberDuckProcessor::kAccentVelocity;
+constexpr int kMidiToPatternNote = RubberDuckProcessor::kMidiToPatternNote;
 constexpr int kPatternSelectLowNote = 36; // in pattern mode, C2..D#3 select patterns 1..16
 
 // Osc1 choice (v2.12 numbering) to v1.02's three waveforms and back; v1.02 has

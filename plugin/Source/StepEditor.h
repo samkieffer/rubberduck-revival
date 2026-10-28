@@ -35,6 +35,10 @@ public:
     bool canRedo() const { return !redoStack.empty(); }
     bool canPaste() const;
 
+    // The pattern(s) on screen, and a name for them ("0", "2+3").
+    std::vector<rd::Pattern> shownPatterns() const;
+    juce::String shownName() const;
+
     int getEntryOctave() const { return entryOctave; }
     void setEntryOctave(int octave);
     // Short description of the keys, with the characters of the current layout.

@@ -43,7 +43,8 @@ target_sources(RubberDuckRevival PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/StepEditor.cpp
-    Source/KeyLayout.cpp)
+    Source/KeyLayout.cpp
+    Source/MidiExport.cpp)
 
 target_compile_definitions(RubberDuckRevival PUBLIC
     JUCE_WEB_BROWSER=0

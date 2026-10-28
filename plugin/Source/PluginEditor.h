@@ -10,6 +10,23 @@
 #include "PluginProcessor.h"
 #include "StepEditor.h"
 
+// Dragged out of the window, gives the shown pattern(s) as a MIDI file (drop
+// it on a Live track to get a clip); a plain click saves the file instead.
+class MidiDragButton : public juce::TextButton
+{
+public:
+    using juce::TextButton::TextButton;
+    std::function<juce::File()> makeFile;
+    std::function<void()> onPlainClick;
+
+    void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void clicked() override;
+
+private:
+    bool dragged = false;
+};
+
 class RubberDuckEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
@@ -46,6 +63,7 @@ private:
     void selectPattern(int index);
     void loadFile();
     void saveFile();
+    void saveMidi();
     void layoutKnobs(juce::Rectangle<int> area, std::initializer_list<juce::Component*> items);
     void updateEngineControls();
     int editorHeight() const;
@@ -63,6 +81,7 @@ private:
     juce::TextButton octaveDown{"-12"}, semitoneDown{"-1"}, semitoneUp{"+1"}, octaveUp{"+12"};
     juce::TextButton undoButton{"Undo"}, redoButton{"Redo"}, copyButton{"Copy"}, pasteButton{"Paste"};
     juce::TextButton entryOctaveDown{"-"}, entryOctaveUp{"+"};
+    MidiDragButton midiButton{"Drag MIDI"};
     juce::Label entryOctaveLabel;
     StepEditor stepEditor;
     juce::TooltipWindow tooltipWindow{this, 500};
