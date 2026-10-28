@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "PluginProcessor.h"
+#include "RdLookAndFeel.h"
 #include "StepEditor.h"
+#include "Widgets.h"
 
 // Dragged out of the window, gives the shown pattern(s) as a MIDI file (drop
 // it on a Live track to get a clip); a plain click saves the file instead.
@@ -19,6 +21,8 @@ public:
     std::function<juce::File()> makeFile;
     std::function<void()> onPlainClick;
 
+    int getIdealWidth() const;
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void clicked() override;
@@ -33,67 +37,89 @@ public:
     explicit RubberDuckEditor(RubberDuckProcessor&);
     ~RubberDuckEditor() override;
 
+    // Shows the editor in `kind`; with `remember`, also makes it the preference
+    // that every instance follows.
+    void setTheme(rd::ui::ThemeKind kind, bool remember);
+    rd::ui::ThemeKind getTheme() const { return themeKind; }
+
     void paint(juce::Graphics&) override;
     void resized() override;
 
 private:
     struct Knob {
-        juce::Slider slider;
-        juce::Label label;
+        Knob(const char* text, bool big, bool bipolar) : slider(text, big, bipolar) {}
+        RdKnob slider;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
     struct Toggle {
-        juce::TextButton button;
+        Toggle(const juce::String& text, bool compact) : button(text, compact) {}
+        LedKey button;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attachment;
     };
-    struct Choice {
-        juce::ComboBox box;
-        juce::Label label;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attachment;
-    };
-    struct Section {
-        juce::String title;
+    struct Caption {
+        juce::String text;
         juce::Rectangle<int> bounds;
+        bool strong = false;  // ink names (OSC 1) rather than small grey titles
     };
 
-    Knob& addKnob(const char* paramId, const char* text);
-    Toggle& addToggle(const char* paramId, const char* text);
-    Choice& addChoice(const char* paramId, const char* text);
+    RdKnob& addKnob(const char* paramId, const char* text, bool big, bool bipolar = false);
+    LedKey& addToggle(const char* paramId, const juce::String& text, bool compact = false);
+    RdKnob& knob(const char* paramId);
+    LedKey& toggle(const char* paramId);
     void timerCallback() override;
     void selectPattern(int index);
+    void updatePatternKeys();
+    void showThemeMenu();
     void loadFile();
     void saveFile();
     void saveMidi();
-    void layoutKnobs(juce::Rectangle<int> area, std::initializer_list<juce::Component*> items);
     void updateEngineControls();
+    bool isV1() const { return processor.getEngineKind() == RubberDuckProcessor::EngineKind::V102; }
+    int playMode() const;
     int editorHeight() const;
 
     RubberDuckProcessor& processor;
-    juce::LookAndFeel_V4 lookAndFeel;
+    RdLookAndFeel lookAndFeel;
+    rd::ui::ThemeKind themeKind = rd::ui::ThemeKind::Dark;
+    rd::ui::ThemeKind seenPreference = rd::ui::ThemeKind::Dark;
 
-    std::vector<std::unique_ptr<Knob>> knobs;
-    std::vector<std::unique_ptr<Toggle>> toggles;
-    std::vector<std::unique_ptr<Choice>> choices;
-    std::array<juce::TextButton, rd::kNumPatterns> patternButtons;
-    juce::TextButton loadButton{"Load .h30"}, saveButton{"Save .h30"};
+    std::vector<std::pair<juce::String, std::unique_ptr<Knob>>> knobs;
+    std::vector<std::pair<juce::String, std::unique_ptr<Toggle>>> toggles;
+    DuckBadge duck;
+    VfdSelector config;
+    juce::TextButton loadButton{"LOAD"}, saveButton{"SAVE"};
+    std::array<std::unique_ptr<PatternKey>, rd::kNumPatterns> patternKeys;
+    RangeVfd range;
+    MidiDragButton midiButton{"DRAG MIDI"};
+    StepsSwitch stepsSwitch;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> stepsAttachment;
     // Sequencer tools, acting on the shown pattern (or pair).
-    juce::TextButton shiftLeft{juce::CharPointer_UTF8("\xe2\x86\x90")}, shiftRight{juce::CharPointer_UTF8("\xe2\x86\x92")};
-    juce::TextButton octaveDown{"-12"}, semitoneDown{"-1"}, semitoneUp{"+1"}, octaveUp{"+12"};
-    juce::TextButton undoButton{"Undo"}, redoButton{"Redo"}, copyButton{"Copy"}, pasteButton{"Paste"};
-    juce::TextButton entryOctaveDown{"-"}, entryOctaveUp{"+"};
-    MidiDragButton midiButton{"Drag MIDI"};
-    juce::Label entryOctaveLabel;
+    juce::TextButton shiftLeft, shiftRight;
+    juce::TextButton octaveDown{juce::CharPointer_UTF8("\xe2\x88\x92" "12")}, semitoneDown{juce::CharPointer_UTF8("\xe2\x88\x92" "1")};
+    juce::TextButton semitoneUp{"+1"}, octaveUp{"+12"};
+    juce::TextButton undoButton{"UNDO"}, redoButton{"REDO"}, copyButton{"COPY"}, pasteButton{"PASTE"};
+    juce::TextButton entryOctaveDown{juce::CharPointer_UTF8("\xe2\x88\x92")}, entryOctaveUp{"+"};
+    VfdReadout entryOctave;
+    VfdChoice osc1, osc2;
     StepEditor stepEditor;
     juce::TooltipWindow tooltipWindow{this, 500};
     std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<juce::ParameterAttachment> patternAttachment;
-    std::vector<Section> sections;
-    std::vector<Section> captions;  // toolbar group names
+
+    // Laid out by resized(), drawn by paint().
+    std::vector<Caption> sections;     // frames with their notched titles
+    std::vector<Caption> captions;     // small titles (toolbar groups, OSC 1...)
+    std::vector<juce::Rectangle<int>> separators;
+    juce::Rectangle<int> rangeCaption;
+    int nameX = 0;
+
     int shownPattern = -1;
     int shownPlaying = -1;
     int shownEngine = -1;
     int shownPlayMode = -1;
     int shownRows = -1;
+    int shownRange = -1;
+    int pendingPattern = -1;  // selected while another pattern plays, not yet in effect
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RubberDuckEditor)
 };

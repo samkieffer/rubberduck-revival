@@ -1,22 +1,102 @@
 #include "PluginEditor.h"
 
-#include <cstring>
+#include <cmath>
 
 #include "MidiExport.h"
 
-namespace {
+using rd::ui::Face;
+using rd::ui::ThemeKind;
 
-const juce::Colour kBackground(0xff15171b);
-const juce::Colour kPanel(0xff1f2228);
-const juce::Colour kText(0xffe6e6e6);
-const juce::Colour kDim(0xff8a8f99);
-const juce::Colour kAcid(0xffffb000);
-const juce::Colour kOff(0xff3c4049);  // controls the selected engine does not have
+namespace {
 
 constexpr int kWidth = 1000;
 constexpr int kHeight = 634;  // with a single row of steps
+// Chassis margins and the vertical bands of the 16-step layout.
+constexpr int kLeft = 18, kRight = 982;
+constexpr int kHeaderY = 14, kHeaderH = 40;
+constexpr int kPatternY = 62, kPatternH = 44;
+constexpr int kSequencerY = 120, kSequencerH = 182;
+constexpr int kRow1Y = 318, kRow1H = 148;
+constexpr int kRow2Y = 482, kRow2H = 140;
+constexpr int kPatternX = kLeft + 66 + 6;  // first pattern column
+constexpr int kPatternPitch = 34;          // 28 px columns, 6 px apart
+
+const juce::String kRangeTooltip("Engine v1.02, Sequence or Shuffle only");
+
+juce::Font sectionTitleFont()
+{
+    return rd::ui::font(Face::Ui700, 11.0f, 0.22f);
+}
+
+// Text width as CSS lays it out: like JUCE, letter spacing follows every letter, the last one too.
+int cssWidth(const juce::Font& font, const juce::String& text)
+{
+    return static_cast<int>(std::ceil(rd::ui::textWidth(font, text)));
+}
+
+void styleKey(juce::TextButton& b, float fontSize, float tracking = 0.0f, float radius = 3.0f)
+{
+    b.getProperties().set("rd.fontSize", fontSize);
+    b.getProperties().set("rd.tracking", tracking);
+    b.getProperties().set("rd.radius", radius);
+}
+
+// Width of a toolbar key: its text plus padding, at least `minWidth`.
+int keyWidth(RdLookAndFeel& lf, juce::TextButton& b, int minWidth, int padding)
+{
+    if (b.getProperties()["rd.icon"].toString().isNotEmpty())
+        return minWidth;
+    return std::max(minWidth, cssWidth(lf.getTextButtonFont(b, 22), b.getButtonText()) + 2 * padding);
+}
+
+void drawScrew(juce::Graphics& g, const rd::ui::Theme& t, juce::Point<float> topLeft, juce::Line<float> slot)
+{
+    const auto circle = juce::Rectangle<float>(10.0f, 10.0f).withCentre(topLeft.translated(6.0f, 6.0f));
+    g.setColour(t.screw);
+    g.fillEllipse(circle);
+    g.setColour(t.screwRim);
+    g.drawEllipse(circle, 1.0f);
+    g.setColour(t.screwSlot);
+    g.drawLine(slot.getStartX() + topLeft.x, slot.getStartY() + topLeft.y, slot.getEndX() + topLeft.x,
+               slot.getEndY() + topLeft.y, 1.4f);
+}
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+
+int MidiDragButton::getIdealWidth() const
+{
+    return 12 + 10 + 8 + cssWidth(rd::ui::font(Face::Ui600, 13.0f, 0.14f), getButtonText()) + 12;
+}
+
+void MidiDragButton::paintButton(juce::Graphics& g, bool, bool)
+{
+    auto* lf = RdLookAndFeel::of(*this);
+    if (lf == nullptr)
+        return;
+    const auto& t = lf->theme();
+    const auto r = getLocalBounds().toFloat().reduced(0.5f);
+    juce::Path outline, dashes;
+    outline.addRoundedRectangle(r, 4.0f);
+    const float pattern[] = {3.0f, 3.0f};
+    juce::PathStrokeType(1.0f).createDashedStroke(dashes, outline, pattern, 2);
+    g.setColour(t.dashed);
+    g.fillPath(dashes);
+
+    // Three lines, then the name.
+    const float cy = r.getCentreY();
+    juce::Path icon;
+    for (float dy : {-4.0f, 0.0f, 4.0f}) {
+        icon.startNewSubPath(13.0f, cy + dy);
+        icon.lineTo(21.0f, cy + dy);
+    }
+    g.setColour(t.label);
+    g.strokePath(icon, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(t.ink);
+    g.setFont(rd::ui::font(Face::Ui600, 13.0f, 0.14f));
+    g.drawText(getButtonText(), getLocalBounds().withTrimmedLeft(12 + 10 + 8), juce::Justification::centredLeft, false);
+}
 
 void MidiDragButton::mouseDown(const juce::MouseEvent& e)
 {
@@ -40,61 +120,101 @@ void MidiDragButton::clicked()
         onPlainClick();
 }
 
+// ---------------------------------------------------------------------------
+
 RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
-    : AudioProcessorEditor(&p), processor(p), stepEditor(p)
+    : AudioProcessorEditor(&p),
+      processor(p),
+      range(p.apvts),
+      osc1(p.apvts, "osc1", {"TRIANGLE", "SAW/PULSE", "SAW", "SQUARE"}),
+      osc2(p.apvts, "osc2", {"SINE", "SAW", "NOISE"}),
+      stepEditor(p)
 {
-    lookAndFeel.setColourScheme(juce::LookAndFeel_V4::getMidnightColourScheme());
-    lookAndFeel.setColour(juce::Slider::rotarySliderFillColourId, kAcid);
-    lookAndFeel.setColour(juce::Slider::thumbColourId, kAcid);
-    lookAndFeel.setColour(juce::TextButton::buttonOnColourId, kAcid);
-    lookAndFeel.setColour(juce::TextButton::textColourOnId, kBackground);
-    lookAndFeel.setColour(juce::ComboBox::backgroundColourId, kPanel);
+    themeKind = seenPreference = rd::ui::preferredTheme();
+    lookAndFeel.setTheme(rd::ui::Theme::get(themeKind));
     setLookAndFeel(&lookAndFeel);
 
-    addKnob("cutoff", "Cut Off");
-    addKnob("resonance", "Resonance");
-    addKnob("modulation", "Modulation");
-    addKnob("squelch", "Squelch");
-    addKnob("drive", "Drive");
-    addToggle("modification", "m");
-    addToggle("tweak", "Tweak");
-    addToggle("tweet", "Tweet");
-    addKnob("attack", "Attack");
-    addKnob("decay", "Decay");
-    addKnob("accent", "Accent");
-    addChoice("osc1", "Osc 1");
-    addChoice("osc2", "Osc 2");
-    addToggle("osc2double", "x2");
-    addKnob("mix", "Mix");
-    addKnob("tune", "Tune");
-    addKnob("delaytime", "Delay Time");
-    addKnob("delaygain", "Delay Gain");
-    addKnob("delayfeedback", "Feedback");
-    addKnob("distgain", "Dist Gain");
-    addKnob("distdrive", "Dist Drive");
-    addKnob("volume", "Volume");
-    addChoice("engine", "Engine");
-    addChoice("rangestart", "Range from");
-    addChoice("rangeend", "Range to");
-    addChoice("playmode", "Play mode");
-    addChoice("source", "Source");
-    addChoice("quantize", "Pattern change");
-    addToggle("length32", "32 steps").button.setTooltip("Play each pattern with the next one (0+1, 2+3...) as one "
-                                                        "32-step pattern, in Single mode");
+    // Big knobs: the ones played live.
+    addKnob("cutoff", "Cut Off", true);
+    addKnob("resonance", "Resonance", true);
+    addKnob("modulation", "Modulation", true);
+    addKnob("squelch", "Squelch", true);
+    addKnob("drive", "Drive", true);
+    addKnob("attack", "Attack", true);
+    addKnob("decay", "Decay", true);
+    addKnob("accent", "Accent", true);
+    addKnob("mix", "Mix", true);
+    addKnob("distgain", "Dist Gain", true);
+    addKnob("distdrive", "Dist Drive", true);
+    auto& tune = addKnob("tune", "Tune", false, true);
+    addKnob("delaytime", "Dly Time", false);
+    addKnob("delaygain", "Dly Gain", false);
+    addKnob("delayfeedback", "Feedback", false);
+    addKnob("volume", "Volume", false);
+    tune.textFromValueFunction = [](double value) {
+        const int v = juce::roundToInt(value);
+        return v == 0 ? juce::String(juce::CharPointer_UTF8("\xc2\xb1" "0")) : (v > 0 ? "+" : "") + juce::String(v);
+    };
+    tune.valueFromTextFunction = [](const juce::String& text) {
+        return text.retainCharacters("-0123456789").getDoubleValue();
+    };
+    tune.updateText();
 
-    static const char* names[16] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"};
+    addToggle("modification", "M");
+    addToggle("tweak", "TWEAK");
+    addToggle("tweet", "TWEET");
+    addToggle("osc2double", juce::CharPointer_UTF8("\xc3\x97" "2"), true);
+    toggle("modification").setTooltip("Filter modification");
+    toggle("osc2double").setTooltip("Osc 2 an octave up");
+
+    config.addSegment(p.apvts, "engine", "ENG ", {"1.02", "2.12"}, "Engine: v1.02 (1997) or v2.12 (2000)");
+    config.addSegment(p.apvts, "playmode", {}, {"SINGLE", "SEQUENCE", "SHUFFLE"}, "Play mode");
+    config.addSegment(p.apvts, "source", {}, {"PATTERNS", "MIDI NOTES"},
+                      "Sequencer source: the patterns, or MIDI notes played live");
+    config.addSegment(p.apvts, "quantize", {}, {"NEXT BAR", "NEXT STEP", "IMMEDIATE"},
+                      "When a new pattern takes over");
+    addAndMakeVisible(config);
+
+    duck.onClick = [this] { showThemeMenu(); };
+    addAndMakeVisible(duck);
+
+    osc1.isChoiceEnabled = [this](int i) { return i != 0 || !isV1(); };  // no triangle in v1.02
+    osc1.setTooltip("Oscillator 1 waveform");
+    osc2.setTooltip("Oscillator 2 waveform");
+    addAndMakeVisible(osc1);
+    addAndMakeVisible(osc2);
+    range.setTooltip(kRangeTooltip);
+    addAndMakeVisible(range);
+
+    stepsAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.apvts, "length32", stepsSwitch);
+    stepsSwitch.setTooltip("Play each pattern with the next one (0+1, 2+3...) as one 32-step pattern, in Single mode");
+    addAndMakeVisible(stepsSwitch);
+
+    static const char* names = "0123456789ABCDEF";
     for (int i = 0; i < rd::kNumPatterns; ++i) {
-        auto& b = patternButtons[static_cast<size_t>(i)];
-        b.setButtonText(names[i]);
-        b.setClickingTogglesState(false);
-        b.onClick = [this, i] { selectPattern(i); };
-        addAndMakeVisible(b);
+        auto key = std::make_unique<PatternKey>(juce::String::charToString(static_cast<juce::juce_wchar>(names[i])));
+        key->onClick = [this, i] { selectPattern(i); };
+        addAndMakeVisible(*key);
+        patternKeys[static_cast<size_t>(i)] = std::move(key);
     }
 
     auto* patternParam = processor.apvts.getParameter("pattern");
     patternAttachment = std::make_unique<juce::ParameterAttachment>(
         *patternParam, [this](float value) { stepEditor.setPatternIndex(static_cast<int>(value) - 1); });
     patternAttachment->sendInitialUpdate();
+
+    shiftLeft.getProperties().set("rd.icon", "left");
+    shiftRight.getProperties().set("rd.icon", "right");
+    for (auto* b : {&shiftLeft, &shiftRight})
+        styleKey(*b, 11.0f);
+    for (auto* b : {&octaveDown, &semitoneDown, &semitoneUp, &octaveUp})
+        styleKey(*b, 12.0f);
+    for (auto* b : {&undoButton, &redoButton, &copyButton, &pasteButton})
+        styleKey(*b, 12.0f, 0.1f);
+    for (auto* b : {&entryOctaveDown, &entryOctaveUp})
+        styleKey(*b, 13.0f);
+    for (auto* b : {&loadButton, &saveButton})
+        styleKey(*b, 13.0f, 0.14f, 4.0f);
 
     shiftLeft.onClick = [this] { stepEditor.shiftSteps(-1); };
     shiftRight.onClick = [this] { stepEditor.shiftSteps(1); };
@@ -118,6 +238,9 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     redoButton.setTooltip("Redo (Cmd+Shift+Z)");
     copyButton.setTooltip("Copy the shown pattern(s) (Cmd+C)");
     pasteButton.setTooltip("Paste (Cmd+V)");
+    entryOctaveDown.setTooltip("Lower the octave of the note keys");
+    entryOctaveUp.setTooltip("Raise the octave of the note keys");
+    entryOctave.setTooltip("Octave of the lower row of note keys");
     midiButton.makeFile = [this] {
         const auto name = "Rubber Duck " + stepEditor.shownName();
         return midiexport::writeTemporary(
@@ -125,23 +248,23 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     };
     midiButton.onPlainClick = [this] { saveMidi(); };
     midiButton.setTooltip("Drag onto a Live MIDI track to get the shown pattern(s) as a clip; click to save a .mid file");
-    entryOctaveLabel.setJustificationType(juce::Justification::centred);
-    entryOctaveLabel.setColour(juce::Label::textColourId, kText);
-    entryOctaveLabel.setTooltip("Octave of the lower row of note keys");
+    midiButton.setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     for (auto* b : {&shiftLeft, &shiftRight, &octaveDown, &semitoneDown, &semitoneUp, &octaveUp, &undoButton, &redoButton,
-                    &copyButton, &pasteButton, &entryOctaveDown, &entryOctaveUp, static_cast<juce::TextButton*>(&midiButton)}) {
+                    &copyButton, &pasteButton, &entryOctaveDown, &entryOctaveUp, static_cast<juce::TextButton*>(&midiButton),
+                    &loadButton, &saveButton}) {
         b->setWantsKeyboardFocus(false);
         addAndMakeVisible(*b);
     }
-    addAndMakeVisible(entryOctaveLabel);
+    addAndMakeVisible(entryOctave);
 
     loadButton.onClick = [this] { loadFile(); };
     saveButton.onClick = [this] { saveFile(); };
-    addAndMakeVisible(loadButton);
-    addAndMakeVisible(saveButton);
+    loadButton.setTooltip("Load a Rubber Duck machine state (.h30)");
+    saveButton.setTooltip("Save the machine state as a .h30 file");
     addAndMakeVisible(stepEditor);
 
     setSize(kWidth, editorHeight());
+    timerCallback();
     startTimerHz(20);
 }
 
@@ -150,53 +273,79 @@ RubberDuckEditor::~RubberDuckEditor()
     setLookAndFeel(nullptr);
 }
 
-RubberDuckEditor::Knob& RubberDuckEditor::addKnob(const char* paramId, const char* text)
+RdKnob& RubberDuckEditor::addKnob(const char* paramId, const char* text, bool big, bool bipolar)
 {
-    auto k = std::make_unique<Knob>();
-    k->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    k->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 56, 18);
-    k->label.setText(text, juce::dontSendNotification);
-    k->label.setJustificationType(juce::Justification::centred);
-    k->label.setColour(juce::Label::textColourId, kDim);
+    auto k = std::make_unique<Knob>(text, big, bipolar);
     k->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, paramId, k->slider);
-    addAndMakeVisible(k->slider);
-    addAndMakeVisible(k->label);
     k->slider.setComponentID(paramId);
-    knobs.push_back(std::move(k));
-    return *knobs.back();
+    addAndMakeVisible(k->slider);
+    knobs.emplace_back(paramId, std::move(k));
+    return knobs.back().second->slider;
 }
 
-RubberDuckEditor::Toggle& RubberDuckEditor::addToggle(const char* paramId, const char* text)
+LedKey& RubberDuckEditor::addToggle(const char* paramId, const juce::String& text, bool compact)
 {
-    auto t = std::make_unique<Toggle>();
-    t->button.setButtonText(text);
-    t->button.setClickingTogglesState(true);
+    auto t = std::make_unique<Toggle>(text, compact);
     t->attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.apvts, paramId, t->button);
     t->button.setComponentID(paramId);
     addAndMakeVisible(t->button);
-    toggles.push_back(std::move(t));
-    return *toggles.back();
+    toggles.emplace_back(paramId, std::move(t));
+    return toggles.back().second->button;
 }
 
-RubberDuckEditor::Choice& RubberDuckEditor::addChoice(const char* paramId, const char* text)
+RdKnob& RubberDuckEditor::knob(const char* paramId)
 {
-    auto c = std::make_unique<Choice>();
-    if (auto* param = dynamic_cast<juce::AudioParameterChoice*>(processor.apvts.getParameter(paramId)))
-        c->box.addItemList(param->choices, 1);
-    c->label.setText(text, juce::dontSendNotification);
-    c->label.setColour(juce::Label::textColourId, kDim);
-    c->label.setJustificationType(juce::Justification::centredLeft);
-    c->attachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts, paramId, c->box);
-    c->box.setComponentID(paramId);
-    addAndMakeVisible(c->box);
-    addAndMakeVisible(c->label);
-    choices.push_back(std::move(c));
-    return *choices.back();
+    for (auto& [id, k] : knobs)
+        if (id == paramId)
+            return k->slider;
+    jassertfalse;
+    return knobs.front().second->slider;
+}
+
+LedKey& RubberDuckEditor::toggle(const char* paramId)
+{
+    for (auto& [id, t] : toggles)
+        if (id == paramId)
+            return t->button;
+    jassertfalse;
+    return toggles.front().second->button;
+}
+
+int RubberDuckEditor::playMode() const
+{
+    return static_cast<int>(std::lround(processor.apvts.getRawParameterValue("playmode")->load()));
 }
 
 int RubberDuckEditor::editorHeight() const
 {
     return kHeight + StepEditor::heightFor(stepEditor.numRows()) - StepEditor::heightFor(1);
+}
+
+void RubberDuckEditor::setTheme(ThemeKind kind, bool remember)
+{
+    if (remember) {
+        rd::ui::setPreferredTheme(kind);
+        seenPreference = kind;
+    }
+    themeKind = kind;
+    lookAndFeel.setTheme(rd::ui::Theme::get(kind));
+    sendLookAndFeelChange();
+    resized();
+    repaint();
+}
+
+void RubberDuckEditor::showThemeMenu()
+{
+    juce::PopupMenu menu;
+    menu.addItem(1, "Dark theme", true, themeKind == ThemeKind::Dark);
+    menu.addItem(2, "Light theme", true, themeKind == ThemeKind::Light);
+    menu.addSeparator();
+    menu.addItem(3, "Rubber Duck Revival " JucePlugin_VersionString, false);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&duck),
+                       [safe = juce::Component::SafePointer<RubberDuckEditor>(this)](int result) {
+                           if (safe != nullptr && (result == 1 || result == 2))
+                               safe->setTheme(result == 2 ? ThemeKind::Light : ThemeKind::Dark, true);
+                       });
 }
 
 void RubberDuckEditor::selectPattern(int index)
@@ -261,242 +410,324 @@ void RubberDuckEditor::updateEngineControls()
 {
     // v1.02 has no Squelch/Drive filter branch, no triangle and 14 patterns;
     // its sequence modes play a pattern range instead of the song.
-    const bool v1 = processor.getEngineKind() == RubberDuckProcessor::EngineKind::V102;
-    // Disabled controls lose their acid colour so they read as absent, not just dimmed.
-    auto enable = [this](const char* id, bool on) {
-        for (auto& k : knobs)
-            if (k->slider.getComponentID() == id) {
-                k->slider.setEnabled(on);
-                k->label.setEnabled(on);
-                for (auto colour : {juce::Slider::rotarySliderFillColourId, juce::Slider::thumbColourId})
-                    if (on)
-                        k->slider.removeColour(colour);
-                    else
-                        k->slider.setColour(colour, kOff);
-            }
-        for (auto& t : toggles)
-            if (t->button.getComponentID() == id) {
-                t->button.setEnabled(on);
-                if (on)
-                    t->button.removeColour(juce::TextButton::buttonOnColourId);
-                else
-                    t->button.setColour(juce::TextButton::buttonOnColourId, kOff);
-            }
-        for (auto& c : choices)
-            if (c->box.getComponentID() == id) {
-                c->box.setEnabled(on);
-                c->label.setEnabled(on);
-            }
-    };
-    for (const char* id : {"squelch", "drive", "modification", "tweak", "tweet"})
-        enable(id, !v1);
+    const bool v1 = isV1();
+    for (const char* id : {"squelch", "drive"})
+        knob(id).setEnabled(!v1);
+    for (const char* id : {"modification", "tweak", "tweet"})
+        toggle(id).setEnabled(!v1);
     // The range is only played by the v1.02 Sequence and Random modes.
-    const bool single = processor.apvts.getRawParameterValue("playmode")->load() < 0.5f;
-    for (const char* id : {"rangestart", "rangeend"})
-        enable(id, v1 && !single);
-    for (auto& c : choices)
-        if (c->box.getComponentID() == "osc1")
-            c->box.setItemEnabled(1, !v1);
+    range.setActive(v1 && playMode() != 0);
     for (int i = 0; i < rd::kNumPatterns; ++i)
-        patternButtons[static_cast<size_t>(i)].setEnabled(i < processor.numPatterns());
+        patternKeys[static_cast<size_t>(i)]->setEnabled(i < processor.numPatterns());
+    osc1.repaint();
+    resized();
     repaint();
+}
+
+void RubberDuckEditor::updatePatternKeys()
+{
+    const int rows = stepEditor.numRows();
+    const int selected = stepEditor.getPatternIndex();
+    const bool running = processor.isSequencerRunning();
+    const int playing = running ? processor.getPlayingPattern() : -1;
+
+    // Waiting patterns: a selection not in effect yet, the other half of a
+    // 32-step pair, or the next pattern of the v1.02 Sequence range.
+    if (!running || playing == pendingPattern || (rows == 2 && (playing & ~1) == (pendingPattern & ~1)))
+        pendingPattern = -1;
+    int next = -1;
+    if (running) {
+        if (rows == 2 && (playing & ~1) == (selected & ~1))
+            next = playing ^ 1;
+        else if (range.isActive() && playMode() == 1) {
+            const int from = static_cast<int>(processor.apvts.getRawParameterValue("rangestart")->load());
+            const int to = static_cast<int>(processor.apvts.getRawParameterValue("rangeend")->load());
+            if (playing >= from && playing <= to)
+                next = playing < to ? playing + 1 : from;
+        }
+    }
+    for (int i = 0; i < rd::kNumPatterns; ++i) {
+        const bool isSelected = rows == 2 ? (i & ~1) == (selected & ~1) : i == selected;
+        const bool waiting = i != playing && (i == next || i == pendingPattern);
+        patternKeys[static_cast<size_t>(i)]->setState(
+            isSelected, i == playing ? PatternKey::Led::Playing : (waiting ? PatternKey::Led::Pending : PatternKey::Led::Off));
+    }
 }
 
 void RubberDuckEditor::timerCallback()
 {
+    if (const auto preference = rd::ui::preferredTheme(); preference != seenPreference) {
+        // Changed from another instance.
+        seenPreference = preference;
+        setTheme(preference, false);
+    }
     const int engineKind = static_cast<int>(processor.getEngineKind());
-    const int playMode = static_cast<int>(std::lround(processor.apvts.getRawParameterValue("playmode")->load()));
-    if (engineKind != shownEngine || playMode != shownPlayMode) {
+    const int mode = playMode();
+    if (engineKind != shownEngine || mode != shownPlayMode) {
         shownEngine = engineKind;
-        shownPlayMode = playMode;
+        shownPlayMode = mode;
         updateEngineControls();
     }
     const int rows = stepEditor.numRows();
-    const bool rowsChanged = rows != shownRows;
-    if (rowsChanged) {
+    if (rows != shownRows) {
         shownRows = rows;
         setSize(kWidth, editorHeight());
+    }
+    const int rangeValue = static_cast<int>(processor.apvts.getRawParameterValue("rangestart")->load()) * 16
+                           + static_cast<int>(processor.apvts.getRawParameterValue("rangeend")->load());
+    if (rangeValue != shownRange) {
+        shownRange = rangeValue;
+        repaint(kPatternX, kPatternY + kPatternH - 6, rd::kNumPatterns * kPatternPitch, 8);
     }
     undoButton.setEnabled(stepEditor.canUndo());
     redoButton.setEnabled(stepEditor.canRedo());
     pasteButton.setEnabled(stepEditor.canPaste());
-    entryOctaveLabel.setText("Oct " + juce::String(stepEditor.getEntryOctave()), juce::dontSendNotification);
+    entryOctave.setText(juce::String(stepEditor.getEntryOctave()));
 
     const int selected = stepEditor.getPatternIndex();
     const int playing = processor.isSequencerRunning() ? processor.getPlayingPattern() : -1;
-    if (selected != shownPattern || playing != shownPlaying || rowsChanged) {
-        shownPattern = selected;
-        shownPlaying = playing;
-        for (int i = 0; i < rd::kNumPatterns; ++i) {
-            auto& b = patternButtons[static_cast<size_t>(i)];
-            b.setToggleState(rows == 2 ? (i & ~1) == (selected & ~1) : i == selected, juce::dontSendNotification);
-            b.setColour(juce::TextButton::buttonColourId, i == playing && i != selected ? kAcid.withAlpha(0.35f) : kPanel);
-        }
-    }
+    if (selected != shownPattern && playing >= 0 && selected != playing)
+        pendingPattern = selected;
+    shownPattern = selected;
+    shownPlaying = playing;
+    updatePatternKeys();
 }
 
 void RubberDuckEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(kBackground);
-    g.setColour(kAcid);
-    g.setFont(juce::FontOptions(22.0f, juce::Font::bold));
-    g.drawText("RUBBER DUCK", 16, 8, 200, 30, juce::Justification::centredLeft);
-    g.setColour(kText);
-    g.setFont(juce::FontOptions(16.0f));
-    g.drawText("revival", 168, 12, 100, 26, juce::Justification::centredLeft);
-    g.setColour(kDim);
-    g.setFont(juce::FontOptions(12.0f));
-    g.drawText(juce::String(processor.getEngineKind() == RubberDuckProcessor::EngineKind::V102 ? "1997 engine" : "2000 engine")
-                   + "  v" JucePlugin_VersionString,
-               168, 30, 120, 14, juce::Justification::centredLeft);
-
-    for (const auto& s : sections) {
-        g.setColour(kPanel);
-        g.fillRoundedRectangle(s.bounds.toFloat(), 6.0f);
-        g.setColour(kDim);
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-        g.drawText(s.title, s.bounds.reduced(10, 4).removeFromTop(14), juce::Justification::topLeft);
+    const auto& t = lookAndFeel.theme();
+    const bool light = t.kind == ThemeKind::Light;
+    const int width = getWidth(), height = getHeight();
+    g.fillAll(t.chassis);
+    g.setColour(juce::Colours::white.withAlpha(light ? 0.6f : 0.06f));
+    g.fillRect(0, 0, width, 1);
+    if (light) {
+        g.setColour(juce::Colours::black.withAlpha(0.12f));
+        g.fillRect(0, height - 1, width, 1);
     }
-    g.setColour(kDim);
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    for (const auto& c : captions)
-        g.drawText(c.title, c.bounds, juce::Justification::centredRight);
-}
+    using L = juce::Line<float>;
+    drawScrew(g, t, {5.0f, 5.0f}, L(3.2f, 4.6f, 8.8f, 7.4f));
+    drawScrew(g, t, {static_cast<float>(width) - 17.0f, 5.0f}, L(4.4f, 3.2f, 7.6f, 8.8f));
+    drawScrew(g, t, {5.0f, static_cast<float>(height) - 17.0f}, L(3.0f, 6.8f, 9.0f, 5.2f));
+    drawScrew(g, t, {static_cast<float>(width) - 17.0f, static_cast<float>(height) - 17.0f}, L(5.0f, 3.0f, 7.0f, 9.0f));
 
-void RubberDuckEditor::layoutKnobs(juce::Rectangle<int> area, std::initializer_list<juce::Component*> items)
-{
-    const int w = area.getWidth() / static_cast<int>(items.size());
-    for (auto* c : items) {
-        auto cell = area.removeFromLeft(w).reduced(4, 0);
-        if (auto* slider = dynamic_cast<juce::Slider*>(c)) {
-            for (auto& k : knobs)
-                if (&k->slider == slider) {
-                    k->label.setBounds(cell.removeFromTop(16));
-                    break;
-                }
-            slider->setBounds(cell);
-        } else if (dynamic_cast<juce::ComboBox*>(c) != nullptr) {
-            for (auto& ch : choices)
-                if (&ch->box == c) {
-                    ch->label.setBounds(cell.removeFromTop(16));
-                    break;
-                }
-            c->setBounds(cell.removeFromTop(26).withY(cell.getY() + 20));
-        } else {
-            c->setBounds(cell.withSizeKeepingCentre(cell.getWidth(), 28));
-        }
+    // Name, on the baseline of the header's centre line.
+    {
+        const auto name = rd::ui::font(Face::Name700, 13.0f, 0.08f);
+        const float baseline = static_cast<float>(kHeaderY + kHeaderH / 2) + 5.0f;
+        g.setColour(light ? t.ink : t.acid);
+        g.setFont(name);
+        g.drawSingleLineText("RUBBER DUCK", nameX, juce::roundToInt(baseline));
+        g.setColour(t.label);
+        g.setFont(rd::ui::font(Face::Name500, 11.0f));
+        g.drawSingleLineText("revival", nameX + cssWidth(name, "RUBBER DUCK") + 10, juce::roundToInt(baseline));
+    }
+
+    const int patternCentre = kPatternY + kPatternH / 2;
+    const auto caption = rd::ui::font(Face::Ui700, 11.0f, 0.2f);
+    g.setColour(t.label);
+    g.setFont(caption);
+    g.drawText("PATTERN", kLeft, patternCentre - 8, 66, 16, juce::Justification::centredLeft, false);
+
+    // SEQ RANGE, with the mode under it when the range plays.
+    const bool rangeOn = range.isActive();
+    g.setColour(rangeOn ? t.ink : t.dim);
+    g.drawText("SEQ RANGE", rangeCaption.withHeight(14).withTrimmedRight(-8), juce::Justification::centredLeft, false);
+    if (rangeOn) {
+        g.setColour(t.label);
+        g.setFont(rd::ui::font(Face::Ui600, 9.5f, 0.12f));
+        g.drawText(playMode() == 2 ? juce::CharPointer_UTF8("V1.02 \xc2\xb7 SHUFFLE") : juce::CharPointer_UTF8("V1.02 \xc2\xb7 SEQUENCE"),
+                   rangeCaption.withTrimmedTop(15).withTrimmedRight(-8), juce::Justification::centredLeft, false);
+        // A bar under the patterns of the range.
+        const int from = static_cast<int>(processor.apvts.getRawParameterValue("rangestart")->load());
+        const int to = static_cast<int>(processor.apvts.getRawParameterValue("rangeend")->load());
+        const int a = std::min(from, to), b = std::max(from, to);
+        const int y = patternKeys[0]->getBottom() + 4;
+        g.setColour(t.ink);
+        g.fillRect(kPatternX + a * kPatternPitch, y, (b - a) * kPatternPitch + 28, 3);
+    }
+
+    // Section frames, their titles notched into the top edge.
+    const auto title = sectionTitleFont();
+    for (const auto& s : sections) {
+        g.setColour(t.line);
+        g.drawRoundedRectangle(s.bounds.toFloat().reduced(0.5f), 8.0f, 1.0f);
+        const int w = cssWidth(title, s.text) + 12;
+        const juce::Rectangle<int> notch(s.bounds.getX() + 15, s.bounds.getY() - 7, w, 14);
+        g.setColour(t.chassis);
+        g.fillRect(notch);
+        g.setColour(t.label);
+        g.setFont(title);
+        g.drawText(s.text, notch.withTrimmedLeft(6), juce::Justification::centredLeft, false);
+    }
+    g.setColour(t.line);
+    for (const auto& r : separators)
+        g.fillRect(r);
+
+    for (const auto& c : captions) {
+        g.setColour(c.strong ? t.ink : t.label);
+        g.setFont(c.strong ? rd::ui::font(Face::Ui700, 11.5f, 0.1f) : rd::ui::font(Face::Ui700, 10.5f, 0.16f));
+        g.drawText(c.text, c.bounds.withTrimmedRight(-8), juce::Justification::centredLeft, false);
     }
 }
 
 void RubberDuckEditor::resized()
 {
-    auto find = [this](const char* id) -> juce::Component* { return findChildWithID(id); };
-    auto area = getLocalBounds().reduced(12);
-
-    auto header = area.removeFromTop(40);
-    header.removeFromLeft(240);
-    saveButton.setBounds(header.removeFromRight(90).reduced(2, 6));
-    loadButton.setBounds(header.removeFromRight(90).reduced(2, 6));
-    for (const char* id : {"quantize", "source", "playmode", "engine"}) {
-        for (auto& c : choices)
-            if (c->box.getComponentID() == id) {
-                auto cell = header.removeFromRight(std::strcmp(id, "engine") == 0 ? 150 : 130);
-                c->label.setBounds(cell.removeFromTop(14).translated(0, -2));
-                c->box.setBounds(cell.reduced(2, 2));
-            }
-    }
-
-    area.removeFromTop(6);
-    auto patternRow = area.removeFromTop(30);
-    const int bw = patternRow.getWidth() / rd::kNumPatterns;
-    for (auto& b : patternButtons)
-        b.setBounds(patternRow.removeFromLeft(bw).reduced(2, 0));
-
-    area.removeFromTop(6);
-    {
-        captions.clear();
-        auto bar = area.removeFromTop(26);
-        auto group = [&](const char* title, int titleWidth, std::initializer_list<juce::Component*> items, int itemWidth) {
-            captions.push_back({title, bar.removeFromLeft(titleWidth).withTrimmedRight(6)});
-            for (auto* c : items)
-                c->setBounds(bar.removeFromLeft(itemWidth).reduced(2, 0));
-            bar.removeFromLeft(14);
-        };
-        group("SHIFT", 44, {&shiftLeft, &shiftRight}, 34);
-        group("TRANSPOSE", 74, {&octaveDown, &semitoneDown, &semitoneUp, &octaveUp}, 40);
-        group("EDIT", 40, {&undoButton, &redoButton, &copyButton, &pasteButton}, 52);
-        midiButton.setBounds(bar.removeFromLeft(88).reduced(2, 0));
-        if (auto* length = find("length32"))
-            length->setBounds(bar.removeFromRight(86).reduced(2, 0));
-        bar.removeFromRight(14);
-        entryOctaveUp.setBounds(bar.removeFromRight(28).reduced(2, 0));
-        entryOctaveLabel.setBounds(bar.removeFromRight(52));
-        entryOctaveDown.setBounds(bar.removeFromRight(28).reduced(2, 0));
-        captions.push_back({"KEYS", bar.removeFromRight(46).withTrimmedRight(6)});
-    }
-
-    area.removeFromTop(8);
-    stepEditor.setBounds(area.removeFromTop(StepEditor::heightFor(stepEditor.numRows()) + 8));
-    area.removeFromTop(10);
-
+    const bool light = themeKind == ThemeKind::Light;
+    const int dy = StepEditor::heightFor(stepEditor.numRows()) - StepEditor::heightFor(1);
     sections.clear();
-    auto top = area.removeFromTop(area.getHeight() / 2).reduced(0, 4);
-    auto bottom = area.reduced(0, 4);
+    captions.clear();
+    separators.clear();
 
-    auto filter = top.removeFromLeft(top.getWidth() * 62 / 100).reduced(4, 0);
+    // Header: duck, name ... configuration VFD, LOAD, SAVE.
+    const int headerCentre = kHeaderY + kHeaderH / 2;
+    duck.setBounds(kLeft, headerCentre - 16, light ? 46 : 33, 32);
+    nameX = duck.getRight() + (light ? 12 : 14);
+    int right = kRight;
+    for (auto* b : {&saveButton, &loadButton}) {
+        const int w = keyWidth(lookAndFeel, *b, 0, 12);
+        b->setBounds(right - w, headerCentre - 13, w, 26);
+        right -= w + 14;
+    }
+    const int configWidth = config.getIdealWidth();
+    config.setBounds(right - configWidth, headerCentre - 17, configWidth, 34);
+
+    // Pattern row: 16 keys, SEQ RANGE, DRAG MIDI.
+    const int patternCentre = kPatternY + kPatternH / 2;
+    for (int i = 0; i < rd::kNumPatterns; ++i)
+        patternKeys[static_cast<size_t>(i)]->setBounds(kPatternX + i * kPatternPitch, kPatternY + 4, 28, 36);
+    {
+        const int x = kPatternX + rd::kNumPatterns * kPatternPitch - 6 + 22;
+        const auto caption = rd::ui::font(Face::Ui700, 11.0f, 0.2f);
+        int w = cssWidth(caption, "SEQ RANGE");
+        int h = 14;
+        if (range.isActive()) {
+            w = std::max(w, cssWidth(rd::ui::font(Face::Ui600, 9.5f, 0.12f), juce::CharPointer_UTF8("V1.02 \xc2\xb7 SEQUENCE")));
+            h = 27;
+        }
+        rangeCaption = {x, patternCentre - h / 2, w, h};
+        range.setBounds(x + w + 8, patternCentre - 12, 66, 24);
+        const int mw = midiButton.getIdealWidth();
+        midiButton.setBounds(kRight - mw, patternCentre - 15, mw, 30);
+    }
+
+    // Sequencer frame: toolbar, then the grid.
+    const juce::Rectangle<int> sequencer(kLeft, kSequencerY, kRight - kLeft, kSequencerH + dy);
+    sections.push_back({"SEQUENCER", sequencer});
+    {
+        const int sw = stepsSwitch.getIdealWidth();
+        stepsSwitch.setBounds(sequencer.getRight() - 15 - sw, sequencer.getY() - 10, sw, 20);
+    }
+    const auto inner = sequencer.reduced(15, 0).withTrimmedTop(15).withTrimmedBottom(11);
+    {
+        auto bar = inner.withHeight(24);
+        const auto captionFont = rd::ui::font(Face::Ui700, 10.5f, 0.16f);
+        auto addCaption = [&](const char* text) {
+            const int w = cssWidth(captionFont, text);
+            captions.push_back({text, bar.removeFromLeft(w)});
+            bar.removeFromLeft(4 + 4);
+        };
+        auto place = [&](juce::TextButton& b, int minWidth, int padding) {
+            const int w = keyWidth(lookAndFeel, b, minWidth, padding);
+            b.setBounds(bar.removeFromLeft(w).withSizeKeepingCentre(w, 22));
+            bar.removeFromLeft(4);
+        };
+        addCaption("SHIFT");
+        place(shiftLeft, 28, 7);
+        place(shiftRight, 28, 7);
+        bar.removeFromLeft(18 + 4);
+        addCaption("TRANSPOSE");
+        for (auto* b : {&octaveDown, &semitoneDown, &semitoneUp, &octaveUp})
+            place(*b, 30, 7);
+        bar.removeFromLeft(18 + 4);
+        addCaption("EDIT");
+        for (auto* b : {&undoButton, &redoButton, &copyButton, &pasteButton})
+            place(*b, 0, 9);
+
+        // KEY OCT - [4] +, from the right.
+        auto placeRight = [&](juce::Component& c, int w) {
+            c.setBounds(bar.removeFromRight(w).withSizeKeepingCentre(w, 22));
+            bar.removeFromRight(4);
+        };
+        placeRight(entryOctaveUp, keyWidth(lookAndFeel, entryOctaveUp, 24, 6));
+        placeRight(entryOctave, 26);
+        placeRight(entryOctaveDown, keyWidth(lookAndFeel, entryOctaveDown, 24, 6));
+        bar.removeFromRight(4);
+        const int w = cssWidth(captionFont, "KEY OCT");
+        captions.push_back({"KEY OCT", bar.removeFromRight(w)});
+    }
+    stepEditor.setBounds(inner.getX(), inner.getY() + 24 + 10, inner.getWidth(), StepEditor::heightFor(stepEditor.numRows()));
+
+    // A knob column, centred vertically in a section's inner area.
+    auto placeKnob = [this](const char* id, int x, juce::Rectangle<int> area) {
+        auto& k = knob(id);
+        const auto size = RdKnob::sizeFor(k.isBig());
+        k.setBounds(x, area.getY() + (area.getHeight() - size.getHeight()) / 2, size.getWidth(), size.getHeight());
+        return x + size.getWidth();
+    };
+    auto separator = [this](int x, juce::Rectangle<int> area) {
+        separators.push_back({x + 8, area.getY() + (area.getHeight() - 96) / 2, 1, 96});
+        return x + 17;
+    };
+    // Inside the 1 px border: 8 px on top, 12 on the sides, 6 below.
+    auto content = [](juce::Rectangle<int> r) { return r.reduced(13, 0).withTrimmedTop(9).withTrimmedBottom(7); };
+
+    // Row 1: Filter, Envelope.
+    const int row1 = kRow1Y + dy;
+    const juce::Rectangle<int> filter(kLeft, row1, 620, kRow1H), envelope(kLeft + 632, row1, 332, kRow1H);
     sections.push_back({"FILTER", filter});
-    auto env = top.reduced(4, 0);
-    sections.push_back({"ENVELOPE", env});
+    sections.push_back({"ENVELOPE", envelope});
+    {
+        const auto area = content(filter);
+        int x = area.getX();
+        for (const char* id : {"cutoff", "resonance", "modulation"})
+            x = placeKnob(id, x, area);
+        x = separator(x, area);
+        for (const char* id : {"squelch", "drive"})
+            x = placeKnob(id, x, area);
+        int y = area.getY() + (area.getHeight() - (3 * 24 + 2 * 7)) / 2;
+        for (const char* id : {"modification", "tweak", "tweet"}) {
+            toggle(id).setBounds(area.getRight() - 74, y, 74, 24);
+            y += 24 + 7;
+        }
+    }
+    {
+        const auto area = content(envelope);
+        int x = area.getX() + (area.getWidth() - 3 * 96) / 2;
+        for (const char* id : {"attack", "decay", "accent"})
+            x = placeKnob(id, x, area);
+    }
 
-    auto osc = bottom.removeFromLeft(bottom.getWidth() * 34 / 100).reduced(4, 0);
-    auto fx = bottom.removeFromLeft(bottom.getWidth() * 61 / 100).reduced(4, 0);
-    auto master = bottom.reduced(4, 0);
+    // Row 2: Oscillators, Effects, Master.
+    const int row2 = kRow2Y + dy;
+    const juce::Rectangle<int> osc(kLeft, row2, 356, kRow2H), fx(kLeft + 368, row2, 474, kRow2H),
+        master(kLeft + 854, row2, 110, kRow2H);
     sections.push_back({"OSCILLATORS", osc});
     sections.push_back({"EFFECTS", fx});
     sections.push_back({"MASTER", master});
-
-    auto inner = [](juce::Rectangle<int> r) { return r.reduced(8, 6).withTrimmedTop(14); };
-
     {
-        auto r = inner(filter);
-        auto toggleColumn = r.removeFromRight(70);
-        layoutKnobs(r, {find("cutoff"), find("resonance"), find("modulation"), find("squelch"), find("drive")});
-        const int th = toggleColumn.getHeight() / 3;
-        for (const char* id : {"modification", "tweak", "tweet"})
-            if (auto* c = find(id))
-                c->setBounds(toggleColumn.removeFromTop(th).reduced(4, 6));
+        const auto area = content(osc);
+        const int y1 = area.getY() + (area.getHeight() - (24 + 8 + 24)) / 2, y2 = y1 + 32;
+        const int x = area.getX();
+        captions.push_back({"OSC 1", {x, y1, 38, 24}, true});
+        captions.push_back({"OSC 2", {x, y2, 38, 24}, true});
+        osc1.setBounds(x + 46, y1, 104, 24);
+        osc2.setBounds(x + 46, y2, 64, 24);
+        toggle("osc2double").setBounds(x + 46 + 64 + 8, y2, 34, 24);
+        placeKnob("tune", area.getRight() - 64, area);
+        placeKnob("mix", area.getRight() - 64 - 6 - 96, area);
     }
-    layoutKnobs(inner(env), {find("attack"), find("decay"), find("accent")});
     {
-        auto r = inner(osc);
-        auto left = r.removeFromLeft(r.getWidth() / 2);
-        auto c1 = left.removeFromTop(left.getHeight() / 2);
-        for (auto& c : choices) {
-            if (c->box.getComponentID() == "osc1") {
-                c->label.setBounds(c1.removeFromTop(16));
-                c->box.setBounds(c1.removeFromTop(26));
-            } else if (c->box.getComponentID() == "osc2") {
-                c->label.setBounds(left.removeFromTop(16));
-                auto row = left.removeFromTop(26);
-                if (auto* x2 = find("osc2double"))
-                    x2->setBounds(row.removeFromRight(40).withTrimmedLeft(4));
-                c->box.setBounds(row);
-            }
-        }
-        layoutKnobs(r, {find("mix"), find("tune")});
+        const auto area = content(fx);
+        int x = area.getX() + (area.getWidth() - (3 * 64 + 17 + 2 * 96)) / 2;
+        for (const char* id : {"delaytime", "delaygain", "delayfeedback"})
+            x = placeKnob(id, x, area);
+        x = separator(x, area);
+        for (const char* id : {"distgain", "distdrive"})
+            x = placeKnob(id, x, area);
     }
-    layoutKnobs(inner(fx), {find("delaytime"), find("delaygain"), find("delayfeedback"), find("distgain"), find("distdrive")});
     {
-        auto r = inner(master);
-        auto ranges = r.removeFromRight(r.getWidth() * 55 / 100).reduced(4, 0);
-        layoutKnobs(r, {find("volume")});
-        const int h = ranges.getHeight() / 2;
-        for (const char* id : {"rangestart", "rangeend"})
-            for (auto& c : choices)
-                if (c->box.getComponentID() == id) {
-                    auto cell = ranges.removeFromTop(h);
-                    c->label.setBounds(cell.removeFromTop(16));
-                    c->box.setBounds(cell.removeFromTop(26));
-                }
+        const auto area = content(master);
+        placeKnob("volume", area.getX() + (area.getWidth() - 64) / 2, area);
     }
 }

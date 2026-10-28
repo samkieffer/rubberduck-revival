@@ -173,8 +173,8 @@ int StepsSwitch::getIdealWidth() const
 {
     const auto caption = rd::ui::font(Face::Ui700, 11.0f, 0.22f);
     const auto number = rd::ui::font(Face::Ui700, 13.0f);
-    return juce::roundToInt(6 + rd::ui::textWidth(caption, "STEPS") + 2.4f + 2 + 6 + rd::ui::textWidth(number, "16") + 6
-                            + 36 + 6 + rd::ui::textWidth(number, "32") + 6);
+    return static_cast<int>(std::ceil(6 + rd::ui::textWidth(caption, "STEPS") + 2 + 6 + rd::ui::textWidth(number, "16")
+                                      + 6 + 36 + 6 + rd::ui::textWidth(number, "32") + 6));
 }
 
 void StepsSwitch::paintButton(juce::Graphics& g, bool, bool)
@@ -194,17 +194,20 @@ void StepsSwitch::paintButton(juce::Graphics& g, bool, bool)
     const auto number = rd::ui::font(Face::Ui700, 13.0f);
     g.setColour(t.label);
     g.setFont(caption);
-    g.drawText("STEPS", r.removeFromLeft(rd::ui::textWidth(caption, "STEPS") + 2.4f), juce::Justification::centredLeft,
-               false);
+    // Text rects get some slack: drawText drops the glyphs that do not fit.
+    g.drawText("STEPS", r.removeFromLeft(rd::ui::textWidth(caption, "STEPS")).withTrimmedRight(-4.0f),
+               juce::Justification::centredLeft, false);
     r.removeFromLeft(2.0f + 6.0f);
     g.setFont(number);
     g.setColour(on32 ? t.switchThumb : t.ink);
-    g.drawText("16", r.removeFromLeft(rd::ui::textWidth(number, "16")), juce::Justification::centred, false);
+    g.drawText("16", r.removeFromLeft(rd::ui::textWidth(number, "16")).expanded(3.0f, 0.0f), juce::Justification::centred,
+               false);
     r.removeFromLeft(6.0f);
     const auto track = r.removeFromLeft(36.0f).withSizeKeepingCentre(36.0f, 18.0f);
     r.removeFromLeft(6.0f);
     g.setColour(on32 ? t.ink : t.switchThumb);
-    g.drawText("32", r.removeFromLeft(rd::ui::textWidth(number, "32")), juce::Justification::centred, false);
+    g.drawText("32", r.removeFromLeft(rd::ui::textWidth(number, "32")).expanded(3.0f, 0.0f), juce::Justification::centred,
+               false);
 
     g.setColour(t.switchTrack);
     g.fillRoundedRectangle(track, 3.0f);
