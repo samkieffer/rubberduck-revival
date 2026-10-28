@@ -8,6 +8,7 @@
 
 #include "../plugin/Source/KeyLayout.h"
 #include "../plugin/Source/MidiExport.h"
+#include "../plugin/Source/PluginEditor.h"
 #include "../plugin/Source/PluginProcessor.h"
 #include "../plugin/Source/StepEditor.h"
 #include "rd/EngineV1.h"
@@ -416,6 +417,9 @@ int main(int argc, char** argv)
     {
         RubberDuckProcessor p;
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+        // Renders do not depend on the theme preference of this machine.
+        if (auto* e = dynamic_cast<RubberDuckEditor*>(editor.get()))
+            e->setTheme(rd::ui::ThemeKind::Dark, false);
         StepEditor* steps = nullptr;
         for (auto* c : editor->getChildren())
             if (auto* s = dynamic_cast<StepEditor*>(c))
@@ -469,6 +473,65 @@ int main(int argc, char** argv)
         setParam(p, "engine", 0.0f);
         setParam(p, "playmode", 1.0f);
         settle("4-pairs-v102-sequence.png");
+    }
+
+    // 15b. Editor renders (with RD_SNAPSHOT_DIR): both themes, 16 and 32 steps,
+    //      v1.02 Single, v1.02 Sequence (range 0..1) and v2.12, playing step 6 of
+    //      pattern 0 with the keyboard cursor on step 10, as on the design boards.
+    if (const auto dir = juce::SystemStats::getEnvironmentVariable("RD_SNAPSHOT_DIR", {}); dir.isNotEmpty()) {
+        // The line of the boards: notes (49 = C#4, -1 note off, -2 rest), accents, slides.
+        const int line[16] = {49, 51, 61, -1, -2, 52, 49, 64, 49, 47, -2, 59, 49, 61, 56, 49};
+        auto boardSequence = [&](const SequenceData& base) {
+            auto seq = base;
+            for (int pattern = 0; pattern < 2; ++pattern)
+                for (int s = 0; s < 16; ++s) {
+                    auto& st = seq.patterns[static_cast<size_t>(pattern)].steps[static_cast<size_t>(s)];
+                    st.note = static_cast<int8_t>(pattern == 0 || line[s] < 0 ? line[s] : line[s] - 2);
+                    st.accent = s == 0 || s == 3 || s == 5 || s == 8 || s == 11 || s == 14 ? 1 : 0;
+                    st.slide = s == 2 || s == 7 || s == 12 || (pattern == 0 && s == 15) ? 1 : 0;
+                }
+            return seq;
+        };
+        struct State { const char* name; float engine, playMode; };
+        const State states[] = {{"v102-single", 0.0f, 0.0f}, {"v102-sequence", 0.0f, 1.0f}, {"v212", 1.0f, 0.0f}};
+        int written = 0;
+        for (const bool pairs : {false, true})
+            for (const auto& state : states) {
+                RubberDuckProcessor r;
+                FakeHost host;
+                r.setPlayHead(&host);
+                setParam(r, "engine", state.engine);
+                setParam(r, "playmode", state.playMode);
+                setParam(r, "rangestart", 0.0f);
+                setParam(r, "rangeend", 1.0f);
+                setParam(r, "length32", pairs ? 1.0f : 0.0f);
+                r.setSequence(boardSequence(r.getSequence()));
+                r.prepareToPlay(44100, 128);
+                for (int i = 0; i < 2000 && !(r.getPlayingStep() == 5 && r.getPlayingPattern() == 0); ++i)
+                    run(r, host, 128.0 / 44100.0, 128);
+                std::unique_ptr<juce::AudioProcessorEditor> view(r.createEditor());
+                auto* editorView = dynamic_cast<RubberDuckEditor*>(view.get());
+                StepEditor* grid = nullptr;
+                for (auto* c : view->getChildren())
+                    if (auto* s = dynamic_cast<StepEditor*>(c))
+                        grid = s;
+                grid->getProperties().set("rd.showCursor", true);
+                for (int i = 0; i < 9; ++i)
+                    grid->keyPressed(juce::KeyPress(juce::KeyPress::rightKey, {}, 0));
+                for (const auto theme : {rd::ui::ThemeKind::Dark, rd::ui::ThemeKind::Light}) {
+                    editorView->setTheme(theme, false);
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil(120);
+                    const auto image = view->createComponentSnapshot(view->getLocalBounds(), true, 2.0f);
+                    const auto file = juce::File(dir).getChildFile(
+                        juce::String(theme == rd::ui::ThemeKind::Dark ? "dark" : "light") + (pairs ? "-32-" : "-16-")
+                        + state.name + ".png");
+                    file.deleteFile();
+                    juce::FileOutputStream os(file);
+                    if (juce::PNGImageFormat().writeImageToStream(image, os))
+                        written++;
+                }
+            }
+        check(written == 12, "editor renders: 2 themes x 16/32 steps x 3 engine states");
     }
 
     // 16. MIDI export of the default line: pitches as replayed in MIDI mode,
