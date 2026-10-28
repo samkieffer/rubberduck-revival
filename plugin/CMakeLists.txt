@@ -44,7 +44,22 @@ target_sources(RubberDuckRevival PRIVATE
     Source/PluginEditor.cpp
     Source/StepEditor.cpp
     Source/KeyLayout.cpp
-    Source/MidiExport.cpp)
+    Source/MidiExport.cpp
+    Source/Theme.cpp
+    Source/RdLookAndFeel.cpp
+    Source/Widgets.cpp)
+
+# Interface fonts (SIL Open Font License, see Fonts/OFL-*.txt).
+juce_add_binary_data(RubberDuckFonts
+    HEADER_NAME RdFonts.h
+    NAMESPACE RdFonts
+    SOURCES
+        Fonts/BarlowCondensed-Medium.ttf
+        Fonts/BarlowCondensed-SemiBold.ttf
+        Fonts/BarlowCondensed-Bold.ttf
+        Fonts/ShareTechMono-Regular.ttf
+        Fonts/IBMPlexMono-Medium.ttf
+        Fonts/IBMPlexMono-Bold.ttf)
 
 target_compile_definitions(RubberDuckRevival PUBLIC
     JUCE_WEB_BROWSER=0
@@ -54,6 +69,7 @@ target_compile_definitions(RubberDuckRevival PUBLIC
 target_link_libraries(RubberDuckRevival
     PRIVATE
         rdcore
+        RubberDuckFonts
         juce::juce_audio_utils
         juce::juce_audio_processors
     PUBLIC
