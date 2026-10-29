@@ -419,6 +419,26 @@ void StepEditor::paste()
     commit();
 }
 
+bool StepEditor::canClear() const
+{
+    for (const auto& pattern : shownPatterns())
+        for (const auto& st : pattern.steps)
+            if (st.note != -2 || st.accent != 0 || st.slide != 0)
+                return true;
+    return false;
+}
+
+void StepEditor::clear()
+{
+    if (!canClear())
+        return;
+    checkpoint();
+    const int first = numRows() == 2 ? (patternIndex & ~1) : patternIndex;
+    for (int r = 0; r < numRows(); ++r)
+        data.patterns[static_cast<size_t>(first + r)] = {};
+    commit();
+}
+
 void StepEditor::undo()
 {
     if (undoStack.empty())

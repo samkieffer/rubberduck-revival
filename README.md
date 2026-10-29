@@ -96,7 +96,9 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
 - **Outils de séquence** (pattern affiché, ou les deux en 32 pas) : *Shift* ← → décale
   tous les pas d'un cran en boucle (⇧← ⇧→), *Transpose* −12 −1 +1 +12 (⇧↑ ⇧↓ pour le
   demi-ton, ⌥↑ ⌥↓ pour l'octave ; refusé si une note sortait de la tessiture),
-  *Undo* / *Redo* (⌘Z, ⇧⌘Z), *Copy* / *Paste* (⌘C, ⌘V, aussi d'une instance à l'autre).
+  *Undo* / *Redo* (⌘Z, ⇧⌘Z), *Copy* / *Paste* (⌘C, ⌘V, aussi d'une instance à l'autre),
+  *Clear* vide le pattern (le bouton demande *Sure?* : un second clic dans les 3 s
+  confirme ; annulable par *Undo*). Une nouvelle instance démarre avec des patterns vides.
 - **Exporter en clip MIDI** : glisser le bouton *Drag MIDI* sur une piste MIDI de Live
   (ou dans un clip slot) donne le pattern affiché (ou la paire en 32 pas) comme clip ;
   un simple clic enregistre un `.mid`. Le clip est écrit pour que le plugin, en

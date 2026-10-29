@@ -133,6 +133,8 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     themeKind = seenPreference = rd::ui::preferredTheme();
     lookAndFeel.setTheme(rd::ui::Theme::get(themeKind));
     setLookAndFeel(&lookAndFeel);
+    // The tip has rounded corners: let the editor show through them.
+    tooltipWindow.setOpaque(false);
 
     // Big knobs: the ones played live.
     addKnob("cutoff", "Cut Off", true);
@@ -209,7 +211,7 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
         styleKey(*b, 11.0f);
     for (auto* b : {&octaveDown, &semitoneDown, &semitoneUp, &octaveUp})
         styleKey(*b, 12.0f);
-    for (auto* b : {&undoButton, &redoButton, &copyButton, &pasteButton})
+    for (auto* b : {&undoButton, &redoButton, &copyButton, &pasteButton, &clearButton})
         styleKey(*b, 12.0f, 0.1f);
     for (auto* b : {&entryOctaveDown, &entryOctaveUp})
         styleKey(*b, 13.0f);
@@ -226,6 +228,16 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     redoButton.onClick = [this] { stepEditor.redo(); };
     copyButton.onClick = [this] { stepEditor.copy(); };
     pasteButton.onClick = [this] { stepEditor.paste(); };
+    clearButton.onClick = [this] {
+        if (clearArmedFor.isEmpty()) {
+            clearArmedFor = stepEditor.shownName();
+            clearArmedAt = juce::Time::getMillisecondCounter();
+            clearButton.setButtonText("SURE?");
+        } else {
+            stepEditor.clear();
+            disarmClear();
+        }
+    };
     entryOctaveDown.onClick = [this] { stepEditor.setEntryOctave(stepEditor.getEntryOctave() - 1); };
     entryOctaveUp.onClick = [this] { stepEditor.setEntryOctave(stepEditor.getEntryOctave() + 1); };
     shiftLeft.setTooltip("Shift the steps left (Shift+Left)");
@@ -238,6 +250,7 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     redoButton.setTooltip("Redo (Cmd+Shift+Z)");
     copyButton.setTooltip("Copy the shown pattern(s) (Cmd+C)");
     pasteButton.setTooltip("Paste (Cmd+V)");
+    clearButton.setTooltip("Clear the shown pattern(s): click, then click again to confirm");
     entryOctaveDown.setTooltip("Lower the octave of the note keys");
     entryOctaveUp.setTooltip("Raise the octave of the note keys");
     entryOctave.setTooltip("Octave of the lower row of note keys");
@@ -250,7 +263,7 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     midiButton.setTooltip("Drag onto a Live MIDI track to get the shown pattern(s) as a clip; click to save a .mid file");
     midiButton.setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     for (auto* b : {&shiftLeft, &shiftRight, &octaveDown, &semitoneDown, &semitoneUp, &octaveUp, &undoButton, &redoButton,
-                    &copyButton, &pasteButton, &entryOctaveDown, &entryOctaveUp, static_cast<juce::TextButton*>(&midiButton),
+                    &copyButton, &pasteButton, &clearButton, &entryOctaveDown, &entryOctaveUp, static_cast<juce::TextButton*>(&midiButton),
                     &loadButton, &saveButton}) {
         b->setWantsKeyboardFocus(false);
         addAndMakeVisible(*b);
@@ -346,6 +359,12 @@ void RubberDuckEditor::showThemeMenu()
                            if (safe != nullptr && (result == 1 || result == 2))
                                safe->setTheme(result == 2 ? ThemeKind::Light : ThemeKind::Dark, true);
                        });
+}
+
+void RubberDuckEditor::disarmClear()
+{
+    clearArmedFor.clear();
+    clearButton.setButtonText("CLEAR");
 }
 
 void RubberDuckEditor::selectPattern(int index)
@@ -482,6 +501,11 @@ void RubberDuckEditor::timerCallback()
     undoButton.setEnabled(stepEditor.canUndo());
     redoButton.setEnabled(stepEditor.canRedo());
     pasteButton.setEnabled(stepEditor.canPaste());
+    clearButton.setEnabled(stepEditor.canClear());
+    if (clearArmedFor.isNotEmpty()
+        && (!clearButton.isEnabled() || clearArmedFor != stepEditor.shownName()
+            || juce::Time::getMillisecondCounter() - clearArmedAt > 3000))
+        disarmClear();
     entryOctave.setText(juce::String(stepEditor.getEntryOctave()));
 
     const int selected = stepEditor.getPatternIndex();
@@ -642,6 +666,8 @@ void RubberDuckEditor::resized()
         addCaption("EDIT");
         for (auto* b : {&undoButton, &redoButton, &copyButton, &pasteButton})
             place(*b, 0, 9);
+        // Wide enough for both of its texts.
+        place(clearButton, cssWidth(lookAndFeel.getTextButtonFont(clearButton, 22), "SURE?") + 2 * 9, 9);
 
         // KEY OCT - [4] +, from the right.
         auto placeRight = [&](juce::Component& c, int w) {

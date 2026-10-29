@@ -64,6 +64,27 @@ std::vector<float> run(RubberDuckProcessor& p, FakeHost& host, double seconds, i
     return out;
 }
 
+// A simple line in every pattern (new instances start empty), for the tests
+// that need the sequencer to play something.
+SequenceData demoSequence()
+{
+    SequenceData d;
+    const int8_t notes[16] = {48, 48, 60, 48, -2, 51, 48, 63, 48, 46, -2, 58, 48, 60, 55, 48};
+    const bool accent[16] = {1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0};
+    const bool slide[16] = {0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0};
+    for (auto& pattern : d.patterns)
+        for (int s = 0; s < 16; ++s) {
+            pattern.steps[static_cast<size_t>(s)].note = notes[s];
+            pattern.steps[static_cast<size_t>(s)].accent = accent[s];
+            pattern.steps[static_cast<size_t>(s)].slide = slide[s];
+        }
+    return d;
+}
+
+struct DemoProcessor : RubberDuckProcessor {
+    DemoProcessor() { setSequence(demoSequence()); }
+};
+
 double rms(const std::vector<float>& v, size_t from = 0)
 {
     double s = 0;
@@ -82,7 +103,7 @@ int main(int argc, char** argv)
 
     // 1. At 44.1 kHz the plugin must equal the engine driven by host positions.
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         FakeHost host;
         host.bpm = 127.0;
         p.setPlayHead(&host);
@@ -124,7 +145,7 @@ int main(int argc, char** argv)
 
     // 2. 48 kHz: resampled, same loudness, latency reported, no NaN.
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         FakeHost host;
         host.rate = 48000;
         host.bpm = 127.0;
@@ -143,7 +164,7 @@ int main(int argc, char** argv)
 
     // 3. Pattern change requested mid-bar waits for the next bar.
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         FakeHost host;
         p.setPlayHead(&host);
         p.prepareToPlay(44100, 256);
@@ -157,7 +178,7 @@ int main(int argc, char** argv)
 
     // 4. MIDI notes drive the voice when the source is MIDI.
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         FakeHost host;
         host.playing = false;
         p.setPlayHead(&host);
@@ -180,13 +201,13 @@ int main(int argc, char** argv)
 
     // 5. State round trip keeps parameters and patterns.
     {
-        RubberDuckProcessor a;
+        DemoProcessor a;
         juce::String err;
         a.importH30(acid, err);
         setParam(a, "squelch", 200.0f);
         juce::MemoryBlock state;
         a.getStateInformation(state);
-        RubberDuckProcessor b;
+        DemoProcessor b;
         b.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
         const auto sa = a.getSequence(), sb = b.getSequence();
         bool same = sa.songLength == sb.songLength && sa.song == sb.song;
@@ -202,12 +223,12 @@ int main(int argc, char** argv)
 
     // 6. .h30 export then import gives back the same machine state.
     {
-        RubberDuckProcessor a;
+        DemoProcessor a;
         juce::String err;
         a.importH30(acid, err);
         auto tmp = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("rd_roundtrip.h30");
         check(a.exportH30(tmp), "export .h30");
-        RubberDuckProcessor b;
+        DemoProcessor b;
         check(b.importH30(tmp, err), "re-import exported .h30");
         check(std::lround(b.apvts.getRawParameterValue("cutoff")->load())
                   == std::lround(a.apvts.getRawParameterValue("cutoff")->load()),
@@ -219,7 +240,7 @@ int main(int argc, char** argv)
     //    driven by the host positions.
     const juce::File v1File(content + "/80'$$$.h30");
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         FakeHost host;
         host.bpm = 133.0;
         p.setPlayHead(&host);
@@ -256,7 +277,7 @@ int main(int argc, char** argv)
 
     // 8. v1.02 export writes a version-2 file that loads back the same.
     {
-        RubberDuckProcessor a;
+        DemoProcessor a;
         juce::String err;
         a.importH30(v1File, err);
         setParam(a, "rangeend", 5.0f);
@@ -266,7 +287,7 @@ int main(int argc, char** argv)
         rd::H30File f;
         check(rd::H30File::load(tmp.getFullPathName().toStdString(), f) && f.version == 2 && f.rangeEnd == 5,
               "v1.02: exported file is version 2 with the range");
-        RubberDuckProcessor b;
+        DemoProcessor b;
         b.importH30(tmp, err);
         check(std::lround(b.apvts.getRawParameterValue("resonance")->load()) == 201
                   && b.getEngineKind() == RubberDuckProcessor::EngineKind::V102,
@@ -276,7 +297,7 @@ int main(int argc, char** argv)
 
     // 9. A project saved before the engine choice existed stays on v2.12.
     {
-        RubberDuckProcessor a;
+        DemoProcessor a;
         juce::String err;
         a.importH30(acid, err);
         juce::MemoryBlock state;
@@ -286,7 +307,7 @@ int main(int argc, char** argv)
             xml->removeChildElement(e, true);
         juce::MemoryBlock old;
         juce::AudioProcessor::copyXmlToBinary(*xml, old);
-        RubberDuckProcessor b;
+        DemoProcessor b;
         check(b.getEngineKind() == RubberDuckProcessor::EngineKind::V102, "new instances start on v1.02");
         b.setStateInformation(old.getData(), static_cast<int>(old.getSize()));
         check(b.getEngineKind() == RubberDuckProcessor::EngineKind::V212, "old projects restore on v2.12");
@@ -294,7 +315,7 @@ int main(int argc, char** argv)
 
     // 10. Switching engines while playing, and v1.02 pattern changes at the bar.
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         FakeHost host;
         p.setPlayHead(&host);
         p.prepareToPlay(44100, 256);
@@ -316,7 +337,7 @@ int main(int argc, char** argv)
 
     // 11. v1.02 live notes from the very first block.
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         FakeHost host;
         host.playing = false;
         p.setPlayHead(&host);
@@ -332,12 +353,12 @@ int main(int argc, char** argv)
     // 12. Loading a file mid-bar switches to its pattern at once (no steps of
     //     the new file played at the previous pattern index).
     for (const float engineKind : {0.0f, 1.0f}) {
-        RubberDuckProcessor source;
+        DemoProcessor source;
         setParam(source, "engine", engineKind);
         const auto tmp = juce::File::createTempFile("h30");
         source.exportH30(tmp);
 
-        RubberDuckProcessor p;
+        DemoProcessor p;
         FakeHost host;
         p.setPlayHead(&host);
         setParam(p, "engine", engineKind);
@@ -356,7 +377,7 @@ int main(int argc, char** argv)
     // 13. v1.02 Sequence mode: a pattern chosen for the next bar is the one
     //     played there, then the range carries on from it.
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         FakeHost host;
         p.setPlayHead(&host);
         setParam(p, "playmode", 1.0f);
@@ -387,7 +408,7 @@ int main(int argc, char** argv)
             p.setSequence(d);
             p.prepareToPlay(44100, 256);
         };
-        RubberDuckProcessor pairs, sequence;
+        DemoProcessor pairs, sequence;
         FakeHost hostA, hostB;
         setup(pairs, hostA);
         setup(sequence, hostB);
@@ -403,7 +424,7 @@ int main(int argc, char** argv)
         check(first && second && pairs.getPlayingPattern() == 0,
               engineKind == 0.0f ? "v1.02: 32-step pair alternates each bar" : "32-step pair alternates each bar");
 
-        RubberDuckProcessor pairs2;
+        DemoProcessor pairs2;
         FakeHost hostC;
         setup(pairs2, hostC);
         setParam(pairs2, "length32", 1.0f);
@@ -415,7 +436,7 @@ int main(int argc, char** argv)
 
     // 15. Editor: tracker-style note entry, shift, transpose, undo, 32-step rows.
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         // Renders do not depend on the theme preference of this machine.
         if (auto* e = dynamic_cast<RubberDuckEditor*>(editor.get()))
@@ -473,6 +494,60 @@ int main(int argc, char** argv)
         setParam(p, "engine", 0.0f);
         setParam(p, "playmode", 1.0f);
         settle("4-pairs-v102-sequence.png");
+
+        // CLEAR asks first, then empties the shown pair; undo brings it back.
+        juce::TextButton* clear = nullptr;
+        for (auto* c : editor->getChildren())
+            if (auto* b = dynamic_cast<juce::TextButton*>(c); b != nullptr && b->getButtonText() == "CLEAR")
+                clear = b;
+        auto isEmpty = [&](int pattern) {
+            const auto sequence = p.getSequence();
+            for (const auto& st : sequence.patterns[static_cast<size_t>(pattern)].steps)
+                if (st.note != -2 || st.accent != 0 || st.slide != 0)
+                    return false;
+            return true;
+        };
+        const bool found = clear != nullptr && clear->isEnabled();
+        if (found)
+            clear->triggerClick();
+        settle("5-clear-armed.png");
+        const bool armed = found && clear->getButtonText() == "SURE?" && !isEmpty(0);
+        if (found)
+            clear->triggerClick();
+        settle("6-cleared.png");
+        check(armed && isEmpty(0) && isEmpty(1) && !isEmpty(2) && clear->getButtonText() == "CLEAR",
+              "CLEAR: asks once, then empties the shown pair");
+        key('z', juce::ModifierKeys::commandModifier);
+        check(note(0, 0).note == 49 && !isEmpty(1), "CLEAR: undo brings the patterns back");
+
+        // Tooltips have rounded corners: the editor must show through them, also
+        // when only the tip's area is repainted (as when it appears).
+        juce::TooltipWindow* tips = nullptr;
+        for (auto* c : editor->getChildren())
+            if (auto* t = dynamic_cast<juce::TooltipWindow*>(c))
+                tips = t;
+        bool cornersOk = false;
+        if (tips != nullptr) {
+            tips->displayTip(editor->localPointToGlobal(juce::Point<int>(300, 140)), "Tooltip corners");
+            const auto area = tips->getBounds();
+            const auto withTip = editor->createComponentSnapshot(area);
+            tips->hideTip();
+            const auto plain = editor->createComponentSnapshot(area);
+            cornersOk = withTip.getPixelAt(0, 0) == plain.getPixelAt(0, 0)
+                        && withTip.getPixelAt(8, 8) == rd::ui::Theme::dark().key;
+        }
+        check(cornersOk, "tooltip corners show the editor");
+    }
+
+    // 15c. A new instance starts with empty patterns.
+    {
+        RubberDuckProcessor p;
+        bool empty = true;
+        const auto sequence = p.getSequence();
+        for (const auto& pattern : sequence.patterns)
+            for (const auto& st : pattern.steps)
+                empty = empty && st.note == -2 && st.accent == 0 && st.slide == 0;
+        check(empty, "new instances start with empty patterns");
     }
 
     // 15b. Editor renders (with RD_SNAPSHOT_DIR): both themes, 16 and 32 steps,
@@ -497,7 +572,7 @@ int main(int argc, char** argv)
         int written = 0;
         for (const bool pairs : {false, true})
             for (const auto& state : states) {
-                RubberDuckProcessor r;
+                DemoProcessor r;
                 FakeHost host;
                 r.setPlayHead(&host);
                 setParam(r, "engine", state.engine);
@@ -534,10 +609,10 @@ int main(int argc, char** argv)
         check(written == 12, "editor renders: 2 themes x 16/32 steps x 3 engine states");
     }
 
-    // 16. MIDI export of the default line: pitches as replayed in MIDI mode,
+    // 16. MIDI export of the demo line: pitches as replayed in MIDI mode,
     //     accents loud, slides legato, rests ring on, one bar per pattern.
     {
-        RubberDuckProcessor p;
+        DemoProcessor p;
         const auto patterns = std::vector<rd::Pattern>{p.getSequence().patterns[0], p.getSequence().patterns[1]};
         const auto midi = midiexport::fromPatterns(patterns, 127.0, "test");
         const auto& track = *midi.getTrack(0);
@@ -557,7 +632,7 @@ int main(int argc, char** argv)
         // Replayed through the plugin in MIDI mode, the clip gives back the sequencer's line.
         for (const float engineKind : {0.0f, 1.0f}) {
             auto render = [&](bool fromMidi) {
-                RubberDuckProcessor r;
+                DemoProcessor r;
                 FakeHost host;
                 r.setPlayHead(&host);
                 setParam(r, "engine", engineKind);

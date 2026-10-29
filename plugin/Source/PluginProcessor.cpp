@@ -23,23 +23,6 @@ int tempoKnobFor(float bpm)
     return juce::jlimit(0, 255, static_cast<int>(std::lround((bpm - 60.0f) * 255.0f / 190.0f)));
 }
 
-// A simple default line so a fresh instance plays something.
-SequenceData defaultSequence()
-{
-    SequenceData d;
-    const int8_t notes[16] = {48, 48, 60, 48, -2, 51, 48, 63, 48, 46, -2, 58, 48, 60, 55, 48};
-    const bool accent[16] = {1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0};
-    const bool slide[16] = {0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0};
-    for (auto& pattern : d.patterns)
-        for (int s = 0; s < 16; ++s) {
-            pattern.steps[static_cast<size_t>(s)].note = notes[s];
-            pattern.steps[static_cast<size_t>(s)].accent = accent[s];
-            pattern.steps[static_cast<size_t>(s)].slide = slide[s];
-        }
-    d.songLength = 1;
-    return d;
-}
-
 } // namespace
 
 juce::AudioProcessorValueTreeState::ParameterLayout RubberDuckProcessor::createLayout()
@@ -129,7 +112,7 @@ RubberDuckProcessor::RubberDuckProcessor()
     pRangeEnd = raw("rangeend");
     pLength32 = raw("length32");
 
-    sequence = defaultSequence();
+    // A fresh instance starts with empty patterns (all rests).
     readParameters();
     engine.resetSmoothing();
     blockBuffer.resize(rd::kBlockSize);

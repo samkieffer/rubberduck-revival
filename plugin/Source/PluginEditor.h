@@ -70,6 +70,7 @@ private:
     void selectPattern(int index);
     void updatePatternKeys();
     void showThemeMenu();
+    void disarmClear();
     void loadFile();
     void saveFile();
     void saveMidi();
@@ -98,6 +99,11 @@ private:
     juce::TextButton octaveDown{juce::CharPointer_UTF8("\xe2\x88\x92" "12")}, semitoneDown{juce::CharPointer_UTF8("\xe2\x88\x92" "1")};
     juce::TextButton semitoneUp{"+1"}, octaveUp{"+12"};
     juce::TextButton undoButton{"UNDO"}, redoButton{"REDO"}, copyButton{"COPY"}, pasteButton{"PASTE"};
+    // CLEAR asks "SURE?" first; a second click within a few seconds, on the
+    // same pattern(s), empties them.
+    juce::TextButton clearButton{"CLEAR"};
+    juce::String clearArmedFor;  // shown pattern(s) when armed, empty when not
+    juce::uint32 clearArmedAt = 0;
     juce::TextButton entryOctaveDown{juce::CharPointer_UTF8("\xe2\x88\x92")}, entryOctaveUp{"+"};
     VfdReadout entryOctave;
     VfdChoice osc1, osc2;

@@ -33,11 +33,14 @@ public:
     void transpose(int semitones);
     void copy();
     void paste();
+    // Empties the shown pattern(s): rests, no accent, no slide.
+    void clear();
     void undo();
     void redo();
     bool canUndo() const { return !undoStack.empty(); }
     bool canRedo() const { return !redoStack.empty(); }
     bool canPaste() const;
+    bool canClear() const;  // something to clear in the shown pattern(s)
 
     // The pattern(s) on screen, and a name for them ("0", "2+3").
     std::vector<rd::Pattern> shownPatterns() const;
