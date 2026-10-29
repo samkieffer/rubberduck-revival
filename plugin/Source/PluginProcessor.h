@@ -68,6 +68,17 @@ public:
     juce::File getMachineFile() const;
     void setMachineFile(const juce::File& file);
 
+    // The standalone app has no host transport (JUCE's play head there never
+    // plays and has no tempo), so it runs its own: started and stopped from
+    // the editor, from the start of a bar, at a tempo set like the original's
+    // knob (0..255 = 60..250 BPM). Loading a .h30 sets the file's tempo.
+    static constexpr int kDefaultTempoKnob = 128;  // the original's default, 155.4 BPM
+    bool hasOwnTransport() const { return wrapperType == wrapperType_Standalone; }
+    void setTransportPlaying(bool on) { transportPlaying.store(on); }
+    bool isTransportPlaying() const { return transportPlaying.load(); }
+    int getTempoKnob() const { return tempoKnob.load(); }
+    void setTempoKnob(int knob) { tempoKnob.store(juce::jlimit(0, 255, knob)); }
+
     int getPlayingStep() const { return playingStep.load(); }
     int getPlayingPattern() const { return playingPattern.load(); }
     bool isSequencerRunning() const { return sequencerRunning.load(); }
@@ -159,6 +170,10 @@ private:
     double latencyHost = 0;
     std::vector<int16_t> blockBuffer;
     std::vector<float> scratch;
+
+    std::atomic<bool> transportPlaying{false};
+    std::atomic<int> tempoKnob{kDefaultTempoKnob};
+    double ownPpq = 0.0;  // own transport position, in quarter notes
 
     bool wasPlaying = false;
     bool startPending = false;

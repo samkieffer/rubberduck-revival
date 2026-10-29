@@ -415,19 +415,31 @@ void RubberDuckProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     double bpm = 120.0, ppq = 0.0;
     bool playing = false;
-    if (auto* host = getPlayHead())
-        if (auto position = host->getPosition()) {
-            if (auto b = position->getBpm())
-                bpm = *b;
-            if (auto q = position->getPpqPosition())
-                ppq = *q;
-            playing = position->getIsPlaying();
-        }
+    if (hasOwnTransport()) {
+        // Each engine computes the tempo from the knob as its original does.
+        const int knob = tempoKnob.load();
+        engine.setTempoKnob(knob);
+        engineV1.setTempoKnob(knob);
+        bpm = getEngineKind() == EngineKind::V102 ? engineV1.getTempo() : engine.getTempo();
+        playing = transportPlaying.load();
+        if (playing && !wasPlaying)
+            ownPpq = 0.0;
+        ppq = ownPpq;
+    } else {
+        if (auto* host = getPlayHead())
+            if (auto position = host->getPosition()) {
+                if (auto b = position->getBpm())
+                    bpm = *b;
+                if (auto q = position->getPpqPosition())
+                    ppq = *q;
+                playing = position->getIsPlaying();
+            }
+        engine.setTempo(static_cast<float>(bpm));
+        engineV1.setTempo(static_cast<float>(bpm));
+    }
     if (playing && !wasPlaying)
         startPending = true;
     wasPlaying = playing;
-    engine.setTempo(static_cast<float>(bpm));
-    engineV1.setTempo(static_cast<float>(bpm));
     lastBpm.store(static_cast<float>(bpm));
 
     for (const auto meta : midi)
@@ -463,6 +475,8 @@ void RubberDuckProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         buffer.copyFrom(ch, 0, out, n);
     hostSamplePos += n;
+    if (hasOwnTransport() && playing)
+        ownPpq += static_cast<double>(n) / hostRate * bpm / 60.0;
 }
 
 SequenceData RubberDuckProcessor::getSequence() const
@@ -515,6 +529,9 @@ bool RubberDuckProcessor::importH30(const juce::File& file, juce::String& error)
     d.song = h30.song;
     d.songLength = h30.songLength;
     setSequence(d);
+    // The file's tempo, for the standalone app's own transport (a host keeps its own).
+    if (h30.hasParams)
+        setTempoKnob(h30.tempoKnob);
 
     // Files are played by the program that wrote them: versions 1-2 come from
     // v1.02, later ones from v2.x. Parameters are read as that version's loader does.
@@ -590,7 +607,7 @@ bool RubberDuckProcessor::exportH30(const juce::File& file) const
 {
     const SequenceData d = getSequence();
     auto get = [this](const char* id) { return static_cast<int>(std::lround(apvts.getRawParameterValue(id)->load())); };
-    const int knob = tempoKnobFor(lastBpm.load());
+    const int knob = hasOwnTransport() ? getTempoKnob() : tempoKnobFor(lastBpm.load());
     rd::H30File h30;
     if (getEngineKind() == EngineKind::V102) {
         // Version 2, the v1.02 format.
@@ -672,6 +689,7 @@ void RubberDuckProcessor::getStateInformation(juce::MemoryBlock& destData)
     xml->setAttribute("sequence", seq.toBase64Encoding());
     if (const auto file = getMachineFile(); file != juce::File())
         xml->setAttribute("machineFile", file.getFullPathName());
+    xml->setAttribute("tempoKnob", getTempoKnob());
     copyXmlToBinary(*xml, destData);
 }
 
@@ -687,6 +705,8 @@ void RubberDuckProcessor::setStateInformation(const void* data, int sizeInBytes)
     const auto path = xml->getStringAttribute("machineFile");
     xml->removeAttribute("machineFile");
     setMachineFile(juce::File::isAbsolutePath(path) ? juce::File(path) : juce::File());
+    setTempoKnob(xml->getIntAttribute("tempoKnob", kDefaultTempoKnob));
+    xml->removeAttribute("tempoKnob");
     // Projects saved before the v1.02 engine existed keep sounding as v2.12.
     const bool hasEngine = xml->getChildByAttribute("id", "engine") != nullptr;
     apvts.replaceState(juce::ValueTree::fromXml(*xml));

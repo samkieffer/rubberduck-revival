@@ -562,6 +562,122 @@ int main(int argc, char** argv)
         check(empty, "new instances start with empty patterns");
     }
 
+    // 15d. The standalone app's own transport: stopped at first, PLAY runs the
+    //      sequence from the start of a bar exactly as a host at the knob's
+    //      tempo would; SAVE and LOAD carry the tempo; space plays and stops.
+    {
+        auto standalone = [] {
+            juce::AudioProcessor::setTypeOfNextNewPlugin(juce::AudioProcessor::wrapperType_Standalone);
+            auto p = std::make_unique<DemoProcessor>();
+            juce::AudioProcessor::setTypeOfNextNewPlugin(juce::AudioProcessor::wrapperType_Undefined);
+            return p;
+        };
+        constexpr int kKnob = 81;  // 120.4 BPM
+        for (const float engineKind : {0.0f, 1.0f}) {
+            auto own = standalone();
+            FakeHost unused;  // `run` advances it; the standalone has no play head
+            setParam(*own, "engine", engineKind);
+            own->setTempoKnob(kKnob);
+            own->prepareToPlay(44100, 256);
+            const auto stopped = run(*own, unused, 1.0, 256);
+            const bool silent = !own->isSequencerRunning() && rms(stopped) < 1e-6;
+            own->setTransportPlaying(true);
+            const auto played = run(*own, unused, 4.0, 256);
+
+            // The same, in a host stopped for a second, then playing from bar 1.
+            DemoProcessor hosted;
+            FakeHost host;
+            rd::Engine e;
+            rd::EngineV1 e1;
+            e.setTempoKnob(kKnob);
+            e1.setTempoKnob(kKnob);
+            host.bpm = engineKind == 0.0f ? e1.getTempo() : e.getTempo();
+            host.playing = false;
+            hosted.setPlayHead(&host);
+            setParam(hosted, "engine", engineKind);
+            hosted.prepareToPlay(44100, 256);
+            run(hosted, host, 1.0, 256);
+            host.ppq = 0.0;
+            host.playing = true;
+            const auto reference = run(hosted, host, 4.0, 256);
+            check(silent && played == reference && rms(played) > 0.01,
+                  engineKind == 0.0f ? "v1.02 standalone: PLAY sounds like a host at that tempo"
+                                     : "standalone: PLAY sounds like a host at that tempo");
+
+            own->setTransportPlaying(false);
+            run(*own, unused, 0.5, 256);
+            const bool halted = !own->isSequencerRunning();
+            own->setTransportPlaying(true);
+            run(*own, unused, 0.05, 256);  // less than a step
+            check(halted && own->isSequencerRunning() && own->getPlayingStep() == 0,
+                  engineKind == 0.0f ? "v1.02 standalone: STOP, then PLAY starts on step 1"
+                                     : "standalone: STOP, then PLAY starts on step 1");
+        }
+        {
+            auto a = standalone();
+            a->setTempoKnob(kKnob);
+            const auto file = juce::File::createTempFile(".h30");
+            const bool saved = a->exportH30(file);
+            rd::H30File f;
+            rd::H30File::load(file.getFullPathName().toStdString(), f);
+            auto b = standalone();
+            juce::String err;
+            const bool loaded = b->importH30(file, err);
+            file.deleteFile();
+            check(saved && loaded && f.tempoKnob == kKnob && b->getTempoKnob() == kKnob,
+                  "standalone: SAVE writes the tempo, LOAD sets it");
+            a->setTransportPlaying(true);
+            juce::MemoryBlock state;
+            a->getStateInformation(state);
+            auto c = standalone();
+            c->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+            check(c->getTempoKnob() == kKnob && !c->isTransportPlaying(), "standalone: state keeps the tempo, stopped");
+        }
+        {
+            auto p = standalone();
+            std::unique_ptr<juce::AudioProcessorEditor> editor(p->createEditor());
+            auto* view = dynamic_cast<RubberDuckEditor*>(editor.get());
+            juce::TextButton* play = nullptr;
+            for (auto* c : editor->getChildren())
+                if (auto* b = dynamic_cast<juce::TextButton*>(c); b != nullptr && b->getButtonText() == "PLAY")
+                    play = b;
+            const bool spaceTaken = view->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey));
+            const bool started = p->isTransportPlaying() && play != nullptr && play->getButtonText() == "STOP";
+            if (play != nullptr)
+                play->triggerClick();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+            check(spaceTaken && started && !p->isTransportPlaying() && play->getButtonText() == "PLAY",
+                  "standalone: space and PLAY start and stop");
+
+            // In a host, the transport and the space bar are the host's.
+            DemoProcessor hosted;
+            std::unique_ptr<juce::AudioProcessorEditor> hostedEditor(hosted.createEditor());
+            bool hasPlay = false;
+            for (auto* c : hostedEditor->getChildren())
+                if (auto* b = dynamic_cast<juce::TextButton*>(c); b != nullptr && b->getButtonText() == "PLAY")
+                    hasPlay = b->isVisible();
+            check(!hasPlay && !dynamic_cast<RubberDuckEditor*>(hostedEditor.get())->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)),
+                  "in a host: no PLAY key, space left to the host");
+
+            // Renders of the standalone header, playing.
+            if (const auto dir = juce::SystemStats::getEnvironmentVariable("RD_SNAPSHOT_DIR", {}); dir.isNotEmpty()) {
+                p->setMachineFile(juce::File("/Users/test/Patterns/Acid_was_my_first_love.h30"));
+                p->setTempoKnob(kKnob);
+                p->setTransportPlaying(true);
+                for (const auto theme : {rd::ui::ThemeKind::Dark, rd::ui::ThemeKind::Light}) {
+                    view->setTheme(theme, false);
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil(120);
+                    const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 2.0f);
+                    const auto file = juce::File(dir).getChildFile(
+                        juce::String(theme == rd::ui::ThemeKind::Dark ? "dark" : "light") + "-standalone.png");
+                    file.deleteFile();
+                    juce::FileOutputStream os(file);
+                    juce::PNGImageFormat().writeImageToStream(image, os);
+                }
+            }
+        }
+    }
+
     // 15b. Editor renders (with RD_SNAPSHOT_DIR): both themes, 16 and 32 steps,
     //      v1.02 Single, v1.02 Sequence (range 0..1) and v2.12, playing step 6 of
     //      pattern 0 with the keyboard cursor on step 10, as on the design boards.

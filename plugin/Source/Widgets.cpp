@@ -477,6 +477,80 @@ void VfdReadout::paint(juce::Graphics& g)
 
 // ---------------------------------------------------------------------------
 
+namespace {
+
+const juce::String kBpmPrefix("BPM ");
+
+juce::String bpmText(int knob)
+{
+    return juce::String(60.0 + knob * 190.0 / 255.0, 1);
+}
+
+} // namespace
+
+void TempoVfd::setKnob(int newKnob)
+{
+    if (newKnob != knob) {
+        knob = newKnob;
+        repaint();
+    }
+}
+
+int TempoVfd::getIdealWidth() const
+{
+    return static_cast<int>(std::ceil(rd::ui::textWidth(vfdFont(), kBpmPrefix + "250.0"))) + 2 * 12;
+}
+
+void TempoVfd::paint(juce::Graphics& g)
+{
+    auto* lf = RdLookAndFeel::of(*this);
+    if (lf == nullptr)
+        return;
+    const auto& t = lf->theme();
+    const auto font = vfdFont();
+    lf->drawVfdWindow(g, getLocalBounds().toFloat(), 4.0f);
+    // The value right-aligned, so that the digits stay put.
+    auto r = getLocalBounds().toFloat().reduced(12.0f, 4.0f);
+    lf->drawGlowText(g, kBpmPrefix, font, r.removeFromLeft(rd::ui::textWidth(font, kBpmPrefix)),
+                     t.acid.withMultipliedAlpha(0.45f), juce::Justification::centredLeft, true);
+    lf->drawGlowText(g, bpmText(knob), font, r, t.acid, juce::Justification::centredRight, true);
+}
+
+void TempoVfd::change(int newKnob)
+{
+    newKnob = juce::jlimit(0, 255, newKnob);
+    if (newKnob == knob)
+        return;
+    setKnob(newKnob);
+    if (onChange)
+        onChange(knob);
+}
+
+void TempoVfd::mouseDown(const juce::MouseEvent&)
+{
+    dragStart = knob;
+}
+
+void TempoVfd::mouseDrag(const juce::MouseEvent& e)
+{
+    // A step every 2 px, up to go faster.
+    change(dragStart - e.getDistanceFromDragStartY() / 2);
+}
+
+void TempoVfd::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheel)
+{
+    if (!wheel.isSmooth) {
+        change(knob + (wheel.deltaY > 0 ? 1 : -1));
+        return;
+    }
+    wheelSteps += wheel.deltaY * 20.0f;
+    const int steps = static_cast<int>(wheelSteps);
+    wheelSteps -= static_cast<float>(steps);
+    change(knob + steps);
+}
+
+// ---------------------------------------------------------------------------
+
 void FileNameLabel::setFile(const juce::File& newFile)
 {
     if (newFile != file) {

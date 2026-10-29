@@ -145,6 +145,29 @@ private:
     juce::String text;
 };
 
+// The tempo of the standalone app in a VFD, "BPM 155.4", set like the
+// original's tempo knob (0..255 = 60..250 BPM, about 0.75 BPM a step): drag
+// up or down, or scroll.
+class TempoVfd : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    std::function<void(int)> onChange;  // with the new knob value
+    void setKnob(int newKnob);
+    int getIdealWidth() const;
+
+    void paint(juce::Graphics&) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+
+private:
+    void change(int newKnob);
+
+    int knob = 128;
+    int dragStart = 128;
+    float wheelSteps = 0.0f;  // smooth scrolling, not yet a whole step
+};
+
 // Name of the machine state file in the header, after a thin rule, cut with an
 // ellipsis when too long; the tooltip gives the full path. Draws nothing
 // without a file. The text sits on `baseline` (from the top), like the name.

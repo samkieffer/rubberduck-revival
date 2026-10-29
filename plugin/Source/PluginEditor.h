@@ -44,6 +44,7 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    bool keyPressed(const juce::KeyPress& key) override;
 
 private:
     struct Knob {
@@ -74,6 +75,7 @@ private:
     // Shows the machine state file in the header and, in the standalone app,
     // in the window's title bar.
     void showMachineFile();
+    void togglePlay();
     void loadFile();
     void saveFile();
     void saveMidi();
@@ -94,6 +96,11 @@ private:
     juce::File shownFile;
     VfdSelector config;
     juce::TextButton loadButton{"LOAD"}, saveButton{"SAVE"};
+    // The standalone app's own transport (no host there): PLAY / STOP, also
+    // on the space bar, and the tempo.
+    juce::TextButton playButton{"PLAY"};
+    TempoVfd tempo;
+    bool focusTaken = false;
     std::array<std::unique_ptr<PatternKey>, rd::kNumPatterns> patternKeys;
     RangeVfd range;
     MidiDragButton midiButton{"DRAG MIDI"};

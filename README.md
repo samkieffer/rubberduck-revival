@@ -41,6 +41,11 @@ cmake --build build --config Release -j
 La compilation télécharge JUCE puis copie automatiquement le plugin dans
 `~/Library/Audio/Plug-Ins/Components` (AU) et `~/Library/Audio/Plug-Ins/VST3` (VST3).
 L'appli autonome se trouve dans `build/plugin/RubberDuckRevival_artefacts/Release/Standalone/`.
+Sans hôte pour donner le transport, elle a le sien dans l'en-tête : *PLAY* / *STOP* (ou la
+barre d'espace) lance la séquence au début d'une mesure, et l'écran *BPM* règle le tempo
+comme le bouton de l'original (60 à 250 BPM, par pas d'environ 0,75 BPM : glisser vers le
+haut ou le bas, ou molette). *LOAD* reprend le tempo du fichier, *SAVE* l'enregistre. Ces
+commandes n'existent pas dans Live, qui garde son transport et sa barre d'espace.
 
 Sans compiler : chaque build de la CI GitHub (onglet *Actions*, artefact
 `RubberDuckRevival-macOS`) contient l'AU, le VST3 et l'appli. Après décompression,

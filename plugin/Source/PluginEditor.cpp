@@ -227,7 +227,7 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
         styleKey(*b, 12.0f, 0.1f);
     for (auto* b : {&entryOctaveDown, &entryOctaveUp})
         styleKey(*b, 13.0f);
-    for (auto* b : {&loadButton, &saveButton})
+    for (auto* b : {&loadButton, &saveButton, &playButton})
         styleKey(*b, 13.0f, 0.14f, 4.0f);
 
     shiftLeft.onClick = [this] { stepEditor.shiftSteps(-1); };
@@ -286,6 +286,18 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     saveButton.onClick = [this] { saveFile(); };
     loadButton.setTooltip("Load a Rubber Duck machine state (.h30)");
     saveButton.setTooltip("Save the machine state as a .h30 file");
+    if (p.hasOwnTransport()) {
+        playButton.setWantsKeyboardFocus(false);
+        playButton.onClick = [this] { togglePlay(); };
+        playButton.setTooltip("Play or stop the sequence (Space)");
+        addAndMakeVisible(playButton);
+        tempo.onChange = [this](int knob) { processor.setTempoKnob(knob); };
+        tempo.setTooltip("Tempo: drag up or down, or scroll. Loading a .h30 sets its tempo");
+        tempo.setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+        addAndMakeVisible(tempo);
+        // Space plays and stops when no control takes it, too.
+        setWantsKeyboardFocus(true);
+    }
     addAndMakeVisible(stepEditor);
 
     setSize(kWidth, editorHeight());
@@ -399,6 +411,21 @@ void RubberDuckEditor::showMachineFile()
                 peer->setRepresentedFile(file);  // the file's icon in the title bar
         }
     }
+}
+
+void RubberDuckEditor::togglePlay()
+{
+    processor.setTransportPlaying(!processor.isTransportPlaying());
+    playButton.setButtonText(processor.isTransportPlaying() ? "STOP" : "PLAY");
+}
+
+bool RubberDuckEditor::keyPressed(const juce::KeyPress& key)
+{
+    if (processor.hasOwnTransport() && key == juce::KeyPress(juce::KeyPress::spaceKey)) {
+        togglePlay();
+        return true;
+    }
+    return false;
 }
 
 void RubberDuckEditor::selectPattern(int index)
@@ -527,6 +554,15 @@ void RubberDuckEditor::timerCallback()
         setTheme(preference, false);
     }
     showMachineFile();
+    if (processor.hasOwnTransport()) {
+        playButton.setButtonText(processor.isTransportPlaying() ? "STOP" : "PLAY");
+        tempo.setKnob(processor.getTempoKnob());
+        // Once shown, so that the space bar works before any click.
+        if (!focusTaken && isShowing()) {
+            focusTaken = true;
+            grabKeyboardFocus();
+        }
+    }
     const int engineKind = static_cast<int>(processor.getEngineKind());
     const int mode = playMode();
     if (engineKind != shownEngine || mode != shownPlayMode) {
@@ -649,7 +685,7 @@ void RubberDuckEditor::resized()
     captions.clear();
     separators.clear();
 
-    // Header: duck, name ... configuration VFD, LOAD, SAVE.
+    // Header: duck, name, file ... (standalone: PLAY, tempo) configuration VFD, LOAD, SAVE.
     const int headerCentre = kHeaderY + kHeaderH / 2;
     duck.setBounds(kLeft, headerCentre - 16, 33, 32);
     nameX = duck.getRight() + 14;
@@ -661,9 +697,19 @@ void RubberDuckEditor::resized()
     }
     const int configWidth = config.getIdealWidth();
     config.setBounds(right - configWidth, headerCentre - 17, configWidth, 34);
+    right = config.getX() - 14;
+    if (processor.hasOwnTransport()) {
+        const int tw = tempo.getIdealWidth();
+        tempo.setBounds(right - tw, headerCentre - 17, tw, 34);
+        // Wide enough for both of its texts.
+        const auto font = lookAndFeel.getTextButtonFont(playButton, 26);
+        const int pw = std::max(cssWidth(font, "PLAY"), cssWidth(font, "STOP")) + 2 * 12;
+        playButton.setBounds(tempo.getX() - 8 - pw, headerCentre - 13, pw, 26);
+        right = playButton.getX() - 14;
+    }
     {
         const int x = nameX + cssWidth(nameFont(), "RUBBER DUCK") + 10 + cssWidth(subtitleFont(), "revival") + 14;
-        fileName.setBounds(x, kHeaderY, std::max(0, config.getX() - 14 - x), kHeaderH);
+        fileName.setBounds(x, kHeaderY, std::max(0, right - x), kHeaderH);
         fileName.setBaseline(static_cast<float>(kHeaderH / 2) + 5.0f);
     }
 
