@@ -489,9 +489,6 @@ void DuckBadge::paint(juce::Graphics& g)
     if (lf == nullptr)
         return;
     const auto& t = lf->theme();
-    const bool badge = t.kind == rd::ui::ThemeKind::Light;
-    if (badge)
-        lf->drawVfdWindow(g, getLocalBounds().toFloat(), 4.0f);
     // 11 x 7 pixels, 3 px each: # body, B beak, e eye.
     static const char* map[7] = {"...###.....", "..##e##....", "BB#####....", "...###....#",
                                  ".##########", ".#########.", "..#######.."};
@@ -502,7 +499,7 @@ void DuckBadge::paint(juce::Graphics& g)
             const char c = map[y][x];
             if (c == '.')
                 continue;
-            g.setColour(c == '#' ? t.acid : (c == 'B' ? t.beak : (badge ? t.vfd : t.chassis)));
+            g.setColour(c == '#' ? t.acid : (c == 'B' ? t.beak : t.chassis));
             g.fillRect(x0 + x * px, y0 + y * px, px, px);
         }
 }

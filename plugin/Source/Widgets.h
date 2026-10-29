@@ -145,7 +145,7 @@ private:
     juce::String text;
 };
 
-// The pixel duck (on a VFD badge in the light theme); a click opens the theme menu.
+// The pixel duck, straight on the chassis; a click opens the theme menu.
 class DuckBadge : public juce::Component, public juce::SettableTooltipClient
 {
 public:

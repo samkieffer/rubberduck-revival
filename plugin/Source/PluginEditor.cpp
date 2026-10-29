@@ -573,7 +573,6 @@ void RubberDuckEditor::paint(juce::Graphics& g)
 
 void RubberDuckEditor::resized()
 {
-    const bool light = themeKind == ThemeKind::Light;
     const int dy = StepEditor::heightFor(stepEditor.numRows()) - StepEditor::heightFor(1);
     sections.clear();
     captions.clear();
@@ -581,8 +580,8 @@ void RubberDuckEditor::resized()
 
     // Header: duck, name ... configuration VFD, LOAD, SAVE.
     const int headerCentre = kHeaderY + kHeaderH / 2;
-    duck.setBounds(kLeft, headerCentre - 16, light ? 46 : 33, 32);
-    nameX = duck.getRight() + (light ? 12 : 14);
+    duck.setBounds(kLeft, headerCentre - 16, 33, 32);
+    nameX = duck.getRight() + 14;
     int right = kRight;
     for (auto* b : {&saveButton, &loadButton}) {
         const int w = keyWidth(lookAndFeel, *b, 0, 12);
@@ -718,13 +717,21 @@ void RubberDuckEditor::resized()
         placeKnob("mix", area.getRight() - 64 - 6 - 96, area);
     }
     {
+        // Separator in the middle; delay and distortion each centred in the
+        // space between the frame's border and the separator.
         const auto area = content(fx);
-        int x = area.getX() + (area.getWidth() - (3 * 64 + 17 + 2 * 96)) / 2;
-        for (const char* id : {"delaytime", "delaygain", "delayfeedback"})
-            x = placeKnob(id, x, area);
-        x = separator(x, area);
-        for (const char* id : {"distgain", "distdrive"})
-            x = placeKnob(id, x, area);
+        const int line = fx.getCentreX() - 1;
+        separator(line - 8, area);
+        auto placeGroup = [&](std::initializer_list<const char*> ids, int from, int to) {
+            int width = 0;
+            for (const char* id : ids)
+                width += RdKnob::sizeFor(knob(id).isBig()).getWidth();
+            int x = from + (to - from - width) / 2;
+            for (const char* id : ids)
+                x = placeKnob(id, x, area);
+        };
+        placeGroup({"delaytime", "delaygain", "delayfeedback"}, fx.getX() + 1, line);
+        placeGroup({"distgain", "distdrive"}, line + 1, fx.getRight() - 1);
     }
     {
         const auto area = content(master);
