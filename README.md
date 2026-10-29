@@ -97,7 +97,10 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
   = accent, notes liées (legato) = slide. MIDI C1 correspond à la note « C-4 » des patterns.
 - **Éditeur de pas** : glisser verticalement ou molette sur une note pour la changer,
   double-clic pour silence/note, clic droit pour « Note off », octave, effacer ; un
-  clic sur les LED *ACCENT* et *SLIDE* les bascule.
+  clic sur les LED *ACCENT* et *SLIDE* les bascule. Comme dans l'original, *SLIDE* se
+  met sur la note d'arrivée : elle glisse depuis la note qui sonne avant elle, sans
+  redéclencher l'enveloppe (sur une TB-303, on marque au contraire la note de départ).
+  Le trait bleu arrive donc sur le pas marqué, depuis le pas précédent.
 - **Saisie au clavier** (façon tracker) : cliquer une note ou une touche *STEP* pour y placer le curseur, puis
   taper. Les touches sont prises à leur *position* (même place en AZERTY et en QWERTY) :
   rangée du bas (Z S X D C V G B N H J M en QWERTY, W S X D C V G B N H J , en AZERTY)

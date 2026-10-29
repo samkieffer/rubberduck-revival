@@ -551,6 +551,39 @@ int main(int argc, char** argv)
         check(cornersOk, "tooltip corners show the editor");
     }
 
+    // 15e. A slide step glides from the note before it: its tie comes in from
+    //      the previous step. Drawn alone, the LED is the column changed the
+    //      most, with the tie on its left (only the glow on its right).
+    {
+        RubberDuckProcessor p;
+        std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+        StepEditor* steps = nullptr;
+        for (auto* c : editor->getChildren())
+            if (auto* s = dynamic_cast<StepEditor*>(c))
+                steps = s;
+        const auto plain = steps->createComponentSnapshot(steps->getLocalBounds());
+        auto sequence = p.getSequence();
+        sequence.patterns[0].steps[5].slide = 1;
+        p.setSequence(sequence);
+        steps->reload();
+        const auto marked = steps->createComponentSnapshot(steps->getLocalBounds());
+        std::vector<int> changed(static_cast<size_t>(plain.getWidth()), 0);
+        for (int y = 0; y < plain.getHeight(); ++y)
+            for (int x = 0; x < plain.getWidth(); ++x)
+                if (plain.getPixelAt(x, y) != marked.getPixelAt(x, y))
+                    changed[static_cast<size_t>(x)]++;
+        int first = -1, last = -1, peak = -1;
+        for (int x = 0; x < plain.getWidth(); ++x)
+            if (changed[static_cast<size_t>(x)] > 0) {
+                if (first < 0)
+                    first = x;
+                last = x;
+                if (peak < 0 || changed[static_cast<size_t>(x)] > changed[static_cast<size_t>(peak)])
+                    peak = x;
+            }
+        check(first >= 0 && peak - first > 2 * (last - peak), "slide tie comes in from the previous step");
+    }
+
     // 15c. A new instance starts with empty patterns.
     {
         RubberDuckProcessor p;

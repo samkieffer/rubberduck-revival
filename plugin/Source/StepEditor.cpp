@@ -253,17 +253,19 @@ void StepEditor::paint(juce::Graphics& g)
             const auto accent = cellBounds(r, s, Row::Accent);
             lf->drawLed(g, accent.getCentre(), 8.0f, st.accent ? t.acid : t.accOff, st.accent != 0, true);
 
-            // Slide: a tie to the next step, under the LEDs. Across the pair in
-            // 32-step mode it leaves step 16 and enters step 17.
+            // Slide: the step glides from the note sounding before it, so a tie
+            // comes in from the previous step, under the LEDs (on step 1, from
+            // the bar before). Across the pair in 32-step mode it leaves step 16
+            // and enters step 17.
             const auto slide = cellBounds(r, s, Row::Slide);
             const float tieY = slide.getY() + 5.0f;
             g.setColour(t.slideTie);
             if (st.slide) {
-                const float to = s < kSteps - 1 ? cellBounds(r, s + 1, Row::Slide).getCentreX() : slide.getRight();
-                g.fillRect(juce::Rectangle<float>(slide.getCentreX(), tieY, to - slide.getCentreX(), 2.0f));
+                const float from = s > 0 ? cellBounds(r, s - 1, Row::Slide).getCentreX() : slide.getX();
+                g.fillRect(juce::Rectangle<float>(from, tieY, slide.getCentreX() - from, 2.0f));
             }
-            if (s == 0 && r == 1 && stepAt(0, kSteps - 1).slide)
-                g.fillRect(juce::Rectangle<float>(slide.getCentreX() - 14.0f, tieY, 14.0f, 2.0f));
+            if (s == kSteps - 1 && r == 0 && rows == 2 && stepAt(1, 0).slide)
+                g.fillRect(juce::Rectangle<float>(slide.getCentreX(), tieY, 14.0f, 2.0f));
         }
         // LEDs over the ties.
         for (int s = 0; s < kSteps; ++s) {
