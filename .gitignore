@@ -17,3 +17,6 @@ reference/
 
 .DS_Store
 build-oracle/
+
+# Distribution image (scripts/make_dmg.sh)
+dist/

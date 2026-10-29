@@ -47,6 +47,14 @@ Sans compiler : chaque build de la CI GitHub (onglet *Actions*, artefact
 retirer la quarantaine de macOS avant de copier les plugins :
 `xattr -dr com.apple.quarantine "Rubber Duck Revival.component" "Rubber Duck Revival.vst3"`.
 
+Image disque pour d'autres Mac : `scripts/make_dmg.sh` compile une version universelle
+(Apple Silicon et Intel, macOS 11 ou plus récent) dans `build-dist/` et produit
+`dist/RubberDuckRevival-<version>.dmg`. L'image contient un installeur `.pkg` (AU et VST3
+dans `/Library/Audio/Plug-Ins`, appli dans `/Applications`, chaque partie peut être
+décochée) et un `LISEZ-MOI.txt`. L'installeur n'est pas signé par Apple : au premier
+lancement, Gatekeeper le bloque, et le LISEZ-MOI explique comment l'autoriser (Réglages
+Système → Confidentialité et sécurité → « Ouvrir quand même »).
+
 Dans Ableton Live : Réglages → Plug-ins → activer « Use Audio Units v2 » et/ou
 « Use VST3 Plug-in System Folders », puis « Rescan ». Le plugin apparaît sous
 *Rubber Duck Revival* comme instrument.
