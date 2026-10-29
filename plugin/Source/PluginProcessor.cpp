@@ -480,6 +480,18 @@ void RubberDuckProcessor::setSequence(const SequenceData& data)
     sequenceDirty.store(true);
 }
 
+juce::File RubberDuckProcessor::getMachineFile() const
+{
+    const juce::SpinLock::ScopedLockType lock(machineFileLock);
+    return machineFile;
+}
+
+void RubberDuckProcessor::setMachineFile(const juce::File& file)
+{
+    const juce::SpinLock::ScopedLockType lock(machineFileLock);
+    machineFile = file;
+}
+
 namespace {
 
 void setParam(juce::AudioProcessorValueTreeState& apvts, const char* id, float value)
@@ -658,6 +670,8 @@ void RubberDuckProcessor::getStateInformation(juce::MemoryBlock& destData)
     const int32_t len = d.songLength;
     seq.append(&len, sizeof len);
     xml->setAttribute("sequence", seq.toBase64Encoding());
+    if (const auto file = getMachineFile(); file != juce::File())
+        xml->setAttribute("machineFile", file.getFullPathName());
     copyXmlToBinary(*xml, destData);
 }
 
@@ -669,6 +683,10 @@ void RubberDuckProcessor::setStateInformation(const void* data, int sizeInBytes)
     juce::MemoryBlock seq;
     const bool hasSequence = seq.fromBase64Encoding(xml->getStringAttribute("sequence"));
     xml->removeAttribute("sequence");
+    // A state without a file (older projects, or a new instance's) clears it.
+    const auto path = xml->getStringAttribute("machineFile");
+    xml->removeAttribute("machineFile");
+    setMachineFile(juce::File::isAbsolutePath(path) ? juce::File(path) : juce::File());
     // Projects saved before the v1.02 engine existed keep sounding as v2.12.
     const bool hasEngine = xml->getChildByAttribute("id", "engine") != nullptr;
     apvts.replaceState(juce::ValueTree::fromXml(*xml));

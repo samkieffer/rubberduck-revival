@@ -28,6 +28,17 @@ juce::Font sectionTitleFont()
     return rd::ui::font(Face::Ui700, 11.0f, 0.22f);
 }
 
+// "RUBBER DUCK revival" in the header.
+juce::Font nameFont()
+{
+    return rd::ui::font(Face::Name700, 13.0f, 0.08f);
+}
+
+juce::Font subtitleFont()
+{
+    return rd::ui::font(Face::Name500, 11.0f);
+}
+
 // Text width as CSS lays it out: like JUCE, letter spacing follows every letter, the last one too.
 int cssWidth(const juce::Font& font, const juce::String& text)
 {
@@ -179,6 +190,7 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
 
     duck.onClick = [this] { showThemeMenu(); };
     addAndMakeVisible(duck);
+    addAndMakeVisible(fileName);
 
     osc1.isChoiceEnabled = [this](int i) { return i != 0 || !isV1(); };  // no triangle in v1.02
     osc1.setTooltip("Oscillator 1 waveform");
@@ -367,6 +379,28 @@ void RubberDuckEditor::disarmClear()
     clearButton.setButtonText("CLEAR");
 }
 
+void RubberDuckEditor::showMachineFile()
+{
+    const auto file = processor.getMachineFile();
+    if (file != shownFile) {
+        shownFile = file;
+        fileName.setFile(file);
+    }
+    // In a host the title bar is the host's; the standalone app's is ours.
+    if (processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone)
+        return;
+    if (auto* window = findParentComponentOfClass<juce::DocumentWindow>()) {
+        const juce::String app = JucePlugin_Name;
+        const juce::String dash = juce::CharPointer_UTF8(" \xe2\x80\x94 ");
+        const auto title = file == juce::File() ? app : file.getFileNameWithoutExtension() + dash + app;
+        if (window->getName() != title) {
+            window->setName(title);
+            if (auto* peer = window->getPeer())
+                peer->setRepresentedFile(file);  // the file's icon in the title bar
+        }
+    }
+}
+
 void RubberDuckEditor::selectPattern(int index)
 {
     // In 32-step mode a pair is selected by its first pattern.
@@ -377,14 +411,20 @@ void RubberDuckEditor::selectPattern(int index)
 
 void RubberDuckEditor::loadFile()
 {
-    chooser = std::make_unique<juce::FileChooser>("Load a Rubber Duck machine state", juce::File(), "*.h30;*.H30");
+    // Opens in the folder of the current file, if any.
+    const auto current = processor.getMachineFile();
+    chooser = std::make_unique<juce::FileChooser>("Load a Rubber Duck machine state",
+                                                  current == juce::File() ? juce::File() : current.getParentDirectory(),
+                                                  "*.h30;*.H30");
     chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                          [this](const juce::FileChooser& fc) {
                              const auto file = fc.getResult();
                              if (file == juce::File())
                                  return;
                              juce::String error;
-                             if (!processor.importH30(file, error))
+                             if (processor.importH30(file, error))
+                                 processor.setMachineFile(file);
+                             else
                                  juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                                                                         "Rubber Duck Revival", file.getFileName() + ": " + error);
                              stepEditor.reload();
@@ -393,7 +433,8 @@ void RubberDuckEditor::loadFile()
 
 void RubberDuckEditor::saveFile()
 {
-    chooser = std::make_unique<juce::FileChooser>("Save machine state", juce::File(), "*.h30");
+    // Proposes the current file (macOS asks before replacing it).
+    chooser = std::make_unique<juce::FileChooser>("Save machine state", processor.getMachineFile(), "*.h30");
     chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
                          [this](const juce::FileChooser& fc) {
                              auto file = fc.getResult();
@@ -401,7 +442,12 @@ void RubberDuckEditor::saveFile()
                                  return;
                              if (!file.hasFileExtension("h30"))
                                  file = file.withFileExtension("h30");
-                             processor.exportH30(file);
+                             if (processor.exportH30(file))
+                                 processor.setMachineFile(file);
+                             else
+                                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                                                                        "Rubber Duck Revival",
+                                                                        "Could not save " + file.getFileName());
                          });
 }
 
@@ -480,6 +526,7 @@ void RubberDuckEditor::timerCallback()
         seenPreference = preference;
         setTheme(preference, false);
     }
+    showMachineFile();
     const int engineKind = static_cast<int>(processor.getEngineKind());
     const int mode = playMode();
     if (engineKind != shownEngine || mode != shownPlayMode) {
@@ -537,13 +584,13 @@ void RubberDuckEditor::paint(juce::Graphics& g)
 
     // Name, on the baseline of the header's centre line.
     {
-        const auto name = rd::ui::font(Face::Name700, 13.0f, 0.08f);
+        const auto name = nameFont();
         const float baseline = static_cast<float>(kHeaderY + kHeaderH / 2) + 5.0f;
         g.setColour(light ? t.ink : t.acid);
         g.setFont(name);
         g.drawSingleLineText("RUBBER DUCK", nameX, juce::roundToInt(baseline));
         g.setColour(t.label);
-        g.setFont(rd::ui::font(Face::Name500, 11.0f));
+        g.setFont(subtitleFont());
         g.drawSingleLineText("revival", nameX + cssWidth(name, "RUBBER DUCK") + 10, juce::roundToInt(baseline));
     }
 
@@ -614,6 +661,11 @@ void RubberDuckEditor::resized()
     }
     const int configWidth = config.getIdealWidth();
     config.setBounds(right - configWidth, headerCentre - 17, configWidth, 34);
+    {
+        const int x = nameX + cssWidth(nameFont(), "RUBBER DUCK") + 10 + cssWidth(subtitleFont(), "revival") + 14;
+        fileName.setBounds(x, kHeaderY, std::max(0, config.getX() - 14 - x), kHeaderH);
+        fileName.setBaseline(static_cast<float>(kHeaderH / 2) + 5.0f);
+    }
 
     // Pattern row: 16 keys, SEQ RANGE, DRAG MIDI.
     const int patternCentre = kPatternY + kPatternH / 2;

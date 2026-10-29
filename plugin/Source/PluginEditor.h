@@ -71,6 +71,9 @@ private:
     void updatePatternKeys();
     void showThemeMenu();
     void disarmClear();
+    // Shows the machine state file in the header and, in the standalone app,
+    // in the window's title bar.
+    void showMachineFile();
     void loadFile();
     void saveFile();
     void saveMidi();
@@ -87,6 +90,8 @@ private:
     std::vector<std::pair<juce::String, std::unique_ptr<Knob>>> knobs;
     std::vector<std::pair<juce::String, std::unique_ptr<Toggle>>> toggles;
     DuckBadge duck;
+    FileNameLabel fileName;
+    juce::File shownFile;
     VfdSelector config;
     juce::TextButton loadButton{"LOAD"}, saveButton{"SAVE"};
     std::array<std::unique_ptr<PatternKey>, rd::kNumPatterns> patternKeys;

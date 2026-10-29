@@ -219,6 +219,18 @@ int main(int argc, char** argv)
             }
         check(same, "state round trip keeps patterns and song");
         check(std::lround(b.apvts.getRawParameterValue("squelch")->load()) == 200, "state round trip keeps parameters");
+
+        // The machine state file goes with the state; a state without one clears it.
+        const juce::File machine("/Users/test/Patterns/Acid line.h30");
+        a.setMachineFile(machine);
+        a.getStateInformation(state);
+        b.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        const bool kept = b.getMachineFile() == machine;
+        DemoProcessor fresh;
+        check(fresh.getMachineFile() == juce::File(), "new instances have no machine state file");
+        fresh.getStateInformation(state);
+        b.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        check(kept && b.getMachineFile() == juce::File(), "state round trip keeps the machine state file");
     }
 
     // 6. .h30 export then import gives back the same machine state.
@@ -581,6 +593,10 @@ int main(int argc, char** argv)
                 setParam(r, "rangeend", 1.0f);
                 setParam(r, "length32", pairs ? 1.0f : 0.0f);
                 r.setSequence(boardSequence(r.getSequence()));
+                // A long name in the Sequence renders, to see it cut.
+                r.setMachineFile(juce::File(state.playMode == 1.0f
+                                                ? "/Users/test/Patterns/Rubber Duck session - night bass line with slides and accents, take 3.h30"
+                                                : "/Users/test/Patterns/Acid_was_my_first_love.h30"));
                 r.prepareToPlay(44100, 128);
                 for (int i = 0; i < 2000 && !(r.getPlayingStep() == 5 && r.getPlayingPattern() == 0); ++i)
                     run(r, host, 128.0 / 44100.0, 128);

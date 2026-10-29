@@ -63,6 +63,10 @@ public:
     void setSequence(const SequenceData& data);
     bool importH30(const juce::File& file, juce::String& error);
     bool exportH30(const juce::File& file) const;
+    // The machine state file last loaded or saved (none for a new instance);
+    // kept in the plugin state, so a reopened project still shows it.
+    juce::File getMachineFile() const;
+    void setMachineFile(const juce::File& file);
 
     int getPlayingStep() const { return playingStep.load(); }
     int getPlayingPattern() const { return playingPattern.load(); }
@@ -104,6 +108,8 @@ private:
 
     juce::SpinLock sequenceLock;
     SequenceData sequence;
+    juce::SpinLock machineFileLock;
+    juce::File machineFile;
     std::atomic<bool> sequenceDirty{true};
     std::atomic<bool> snapSmoothing{true};  // after loading a machine state, as the original does
     std::atomic<bool> loadPending{false};   // a .h30 was loaded: switch to its pattern at once

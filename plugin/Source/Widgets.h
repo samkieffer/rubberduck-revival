@@ -145,6 +145,21 @@ private:
     juce::String text;
 };
 
+// Name of the machine state file in the header, after a thin rule, cut with an
+// ellipsis when too long; the tooltip gives the full path. Draws nothing
+// without a file. The text sits on `baseline` (from the top), like the name.
+class FileNameLabel : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    void setFile(const juce::File& newFile);
+    void setBaseline(float y);
+    void paint(juce::Graphics&) override;
+
+private:
+    juce::File file;
+    float baseline = 0.0f;
+};
+
 // The pixel duck, straight on the chassis; a click opens the theme menu.
 class DuckBadge : public juce::Component, public juce::SettableTooltipClient
 {

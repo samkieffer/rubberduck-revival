@@ -477,6 +477,47 @@ void VfdReadout::paint(juce::Graphics& g)
 
 // ---------------------------------------------------------------------------
 
+void FileNameLabel::setFile(const juce::File& newFile)
+{
+    if (newFile != file) {
+        file = newFile;
+        setTooltip(file == juce::File() ? juce::String() : file.getFullPathName());
+        repaint();
+    }
+}
+
+void FileNameLabel::setBaseline(float y)
+{
+    baseline = y;
+    repaint();
+}
+
+void FileNameLabel::paint(juce::Graphics& g)
+{
+    auto* lf = RdLookAndFeel::of(*this);
+    if (lf == nullptr || file == juce::File())
+        return;
+    const auto& t = lf->theme();
+    constexpr float kTextX = 14.0f;  // after the rule
+    g.setColour(t.line);
+    g.fillRect(0.0f, baseline - 11.0f, 1.0f, 14.0f);
+
+    const auto font = rd::ui::font(Face::Name500, 11.0f);
+    const float room = static_cast<float>(getWidth()) - kTextX;
+    auto text = file.getFileNameWithoutExtension();
+    if (rd::ui::textWidth(font, text) > room) {
+        const juce::String ellipsis = juce::CharPointer_UTF8("\xe2\x80\xa6");
+        while (text.isNotEmpty() && rd::ui::textWidth(font, text + ellipsis) > room)
+            text = text.dropLastCharacters(1);
+        text = text.trimEnd() + ellipsis;
+    }
+    g.setColour(t.ink);
+    g.setFont(font);
+    g.drawSingleLineText(text, juce::roundToInt(kTextX), juce::roundToInt(baseline));
+}
+
+// ---------------------------------------------------------------------------
+
 DuckBadge::DuckBadge()
 {
     setMouseCursor(juce::MouseCursor::PointingHandCursor);

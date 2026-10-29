@@ -122,7 +122,9 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
   et choisit le moteur qui l'a écrite (fichiers de version 1–2 : v1.02, versions 3–4 :
   v2.12). Pendant la lecture, le plugin passe aussitôt au pattern de départ du fichier,
   sans attendre la mesure. *SAVE* écrit un fichier relisible par l'original du
-  moteur choisi.
+  moteur choisi, en proposant le nom du fichier en cours. Le nom du dernier fichier
+  chargé ou enregistré s'affiche dans l'en-tête (chemin complet en infobulle) et, dans
+  l'appli autonome, dans la barre de titre ; il est gardé avec le projet Live.
 - **Thème et version** : un clic sur le canard (en haut à gauche) choisit le thème sombre ou
   clair (réglage commun à toutes les instances, gardé dans
   `~/Library/Application Support/Rubber Duck Revival`) et affiche la version (`0.4.0`…),
