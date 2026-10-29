@@ -499,7 +499,9 @@ void DuckBadge::paint(juce::Graphics& g)
             const char c = map[y][x];
             if (c == '.')
                 continue;
-            g.setColour(c == '#' ? t.acid : (c == 'B' ? t.beak : t.chassis));
+            // The eye stays dark: the chassis in the dark theme, ink in the light one.
+            const auto eye = t.kind == rd::ui::ThemeKind::Light ? t.ink : t.chassis;
+            g.setColour(c == '#' ? t.acid : (c == 'B' ? t.beak : eye));
             g.fillRect(x0 + x * px, y0 + y * px, px, px);
         }
 }
