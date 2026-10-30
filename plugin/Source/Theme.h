@@ -16,7 +16,7 @@ struct Theme {
     juce::Colour key, keyHi, keyLo, keyOff, keyOffHi, keyOffLo;   // keys: face, 1 px top edge, 2 px bottom edge
     juce::Colour stepA, stepAHi, stepB, stepBHi, stepLo, stepNum; // step keys, alternating by beat
     juce::Colour vfd, acid, onAcid;                               // VFD windows, acid colour, text on acid
-    juce::Colour accOff, ledOffDisabled, slide, slideOff, slideTie, play, playOff, cursor, beak;
+    juce::Colour accOff, ledOffDisabled, slide, slideOff, slideTie, play, playOff, run, runOff, cursor, beak;
     juce::Colour bigCap, bigFace, bigPtr, smallCap, smallStroke, smallPtr, offCap, offStroke, knobShadow, knobShadowOff;
     juce::Colour tickOn, tickOff, tickDisabled, value, valueHover, badgeText, badgeLine;
     juce::Colour patNaCap, patNaHi, patNaText, patSelHi, dashed, switchTrack, switchThumb, switchThumbHi;
@@ -30,7 +30,7 @@ struct Theme {
 };
 
 // Global preference (not a parameter, not part of the plugin state), kept in
-// "~/Library/Application Support/Rubber Duck Revival/Rubber Duck Revival.settings".
+// "~/Library/Application Support/RubDuck/RubDuck.settings".
 ThemeKind preferredTheme();
 void setPreferredTheme(ThemeKind kind);
 

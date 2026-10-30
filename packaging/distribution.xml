@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Installer layout for scripts/make_dmg.sh; @VERSION@ and @ID@ are filled in by the script. -->
 <installer-gui-script minSpecVersion="2">
-    <title>Rubber Duck Revival @VERSION@</title>
+    <title>RubDuck @VERSION@</title>
     <welcome file="welcome.html" mime-type="text/html"/>
     <conclusion file="conclusion.html" mime-type="text/html"/>
     <options customize="allow" require-scripts="false" hostArchitectures="arm64,x86_64"/>
@@ -24,7 +24,7 @@
         <pkg-ref id="@ID@.vst3"/>
     </choice>
     <choice id="app" title="Application autonome"
-            description="Rubber Duck Revival sans logiciel hôte, dans /Applications.">
+            description="RubDuck sans logiciel hôte, dans /Applications.">
         <pkg-ref id="@ID@.app"/>
     </choice>
 

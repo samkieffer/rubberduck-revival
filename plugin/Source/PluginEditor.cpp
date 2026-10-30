@@ -28,15 +28,10 @@ juce::Font sectionTitleFont()
     return rd::ui::font(Face::Ui700, 11.0f, 0.22f);
 }
 
-// "RUBBER DUCK revival" in the header.
+// "RUBDUCK" in the header.
 juce::Font nameFont()
 {
     return rd::ui::font(Face::Name700, 13.0f, 0.08f);
-}
-
-juce::Font subtitleFont()
-{
-    return rd::ui::font(Face::Name500, 11.0f);
 }
 
 // Text width as CSS lays it out: like JUCE, letter spacing follows every letter, the last one too.
@@ -190,7 +185,8 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
 
     duck.onClick = [this] { showThemeMenu(); };
     addAndMakeVisible(duck);
-    addAndMakeVisible(fileName);
+    preset.onClick = [this] { loadFile(); };
+    addAndMakeVisible(preset);
 
     osc1.isChoiceEnabled = [this](int i) { return i != 0 || !isV1(); };  // no triangle in v1.02
     osc1.setTooltip("Oscillator 1 waveform");
@@ -227,7 +223,7 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
         styleKey(*b, 12.0f, 0.1f);
     for (auto* b : {&entryOctaveDown, &entryOctaveUp})
         styleKey(*b, 13.0f);
-    for (auto* b : {&loadButton, &saveButton, &playButton})
+    for (auto* b : {&loadButton, &saveButton})
         styleKey(*b, 13.0f, 0.14f, 4.0f);
 
     shiftLeft.onClick = [this] { stepEditor.shiftSteps(-1); };
@@ -267,7 +263,7 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     entryOctaveUp.setTooltip("Raise the octave of the note keys");
     entryOctave.setTooltip("Octave of the lower row of note keys");
     midiButton.makeFile = [this] {
-        const auto name = "Rubber Duck " + stepEditor.shownName();
+        const auto name = "RubDuck " + stepEditor.shownName();
         return midiexport::writeTemporary(
             midiexport::fromPatterns(stepEditor.shownPatterns(), processor.getHostBpm(), name), name);
     };
@@ -284,7 +280,7 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
 
     loadButton.onClick = [this] { loadFile(); };
     saveButton.onClick = [this] { saveFile(); };
-    loadButton.setTooltip("Load a Rubber Duck machine state (.h30)");
+    loadButton.setTooltip("Load a machine state (.h30) of the original or of RubDuck");
     saveButton.setTooltip("Save the machine state as a .h30 file");
     if (p.hasOwnTransport()) {
         playButton.setWantsKeyboardFocus(false);
@@ -377,7 +373,7 @@ void RubberDuckEditor::showThemeMenu()
     menu.addItem(1, "Dark theme", true, themeKind == ThemeKind::Dark);
     menu.addItem(2, "Light theme", true, themeKind == ThemeKind::Light);
     menu.addSeparator();
-    menu.addItem(3, "Rubber Duck Revival " JucePlugin_VersionString, false);
+    menu.addItem(3, JucePlugin_Name " " JucePlugin_VersionString, false);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&duck),
                        [safe = juce::Component::SafePointer<RubberDuckEditor>(this)](int result) {
                            if (safe != nullptr && (result == 1 || result == 2))
@@ -396,7 +392,7 @@ void RubberDuckEditor::showMachineFile()
     const auto file = processor.getMachineFile();
     if (file != shownFile) {
         shownFile = file;
-        fileName.setFile(file);
+        preset.setFile(file);
     }
     // In a host the title bar is the host's; the standalone app's is ours.
     if (processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone)
@@ -416,7 +412,14 @@ void RubberDuckEditor::showMachineFile()
 void RubberDuckEditor::togglePlay()
 {
     processor.setTransportPlaying(!processor.isTransportPlaying());
-    playButton.setButtonText(processor.isTransportPlaying() ? "STOP" : "PLAY");
+    showPlaying();
+}
+
+void RubberDuckEditor::showPlaying()
+{
+    const bool playing = processor.isTransportPlaying();
+    playButton.setButtonText(playing ? "STOP" : "PLAY");
+    playButton.setToggleState(playing, juce::dontSendNotification);
 }
 
 bool RubberDuckEditor::keyPressed(const juce::KeyPress& key)
@@ -440,7 +443,7 @@ void RubberDuckEditor::loadFile()
 {
     // Opens in the folder of the current file, if any.
     const auto current = processor.getMachineFile();
-    chooser = std::make_unique<juce::FileChooser>("Load a Rubber Duck machine state",
+    chooser = std::make_unique<juce::FileChooser>("Load a machine state",
                                                   current == juce::File() ? juce::File() : current.getParentDirectory(),
                                                   "*.h30;*.H30");
     chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
@@ -453,7 +456,7 @@ void RubberDuckEditor::loadFile()
                                  processor.setMachineFile(file);
                              else
                                  juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-                                                                        "Rubber Duck Revival", file.getFileName() + ": " + error);
+                                                                        JucePlugin_Name, file.getFileName() + ": " + error);
                              stepEditor.reload();
                          });
 }
@@ -473,14 +476,14 @@ void RubberDuckEditor::saveFile()
                                  processor.setMachineFile(file);
                              else
                                  juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-                                                                        "Rubber Duck Revival",
+                                                                        JucePlugin_Name,
                                                                         "Could not save " + file.getFileName());
                          });
 }
 
 void RubberDuckEditor::saveMidi()
 {
-    const auto name = "Rubber Duck " + stepEditor.shownName();
+    const auto name = "RubDuck " + stepEditor.shownName();
     chooser = std::make_unique<juce::FileChooser>("Save the pattern as MIDI",
                                                   juce::File::getSpecialLocation(juce::File::userHomeDirectory)
                                                       .getChildFile(name + ".mid"),
@@ -555,7 +558,7 @@ void RubberDuckEditor::timerCallback()
     }
     showMachineFile();
     if (processor.hasOwnTransport()) {
-        playButton.setButtonText(processor.isTransportPlaying() ? "STOP" : "PLAY");
+        showPlaying();
         tempo.setKnob(processor.getTempoKnob());
         // Once shown, so that the space bar works before any click.
         if (!focusTaken && isShowing()) {
@@ -624,10 +627,7 @@ void RubberDuckEditor::paint(juce::Graphics& g)
         const float baseline = static_cast<float>(kHeaderY + kHeaderH / 2) + 5.0f;
         g.setColour(light ? t.ink : t.acid);
         g.setFont(name);
-        g.drawSingleLineText("RUBBER DUCK", nameX, juce::roundToInt(baseline));
-        g.setColour(t.label);
-        g.setFont(subtitleFont());
-        g.drawSingleLineText("revival", nameX + cssWidth(name, "RUBBER DUCK") + 10, juce::roundToInt(baseline));
+        g.drawSingleLineText("RUBDUCK", nameX, juce::roundToInt(baseline));
     }
 
     const int patternCentre = kPatternY + kPatternH / 2;
@@ -685,7 +685,7 @@ void RubberDuckEditor::resized()
     captions.clear();
     separators.clear();
 
-    // Header: duck, name, file ... (standalone: PLAY, tempo) configuration VFD, LOAD, SAVE.
+    // Header: duck, name, preset ... (standalone: tempo) configuration VFD, LOAD, SAVE.
     const int headerCentre = kHeaderY + kHeaderH / 2;
     duck.setBounds(kLeft, headerCentre - 16, 33, 32);
     nameX = duck.getRight() + 14;
@@ -701,16 +701,11 @@ void RubberDuckEditor::resized()
     if (processor.hasOwnTransport()) {
         const int tw = tempo.getIdealWidth();
         tempo.setBounds(right - tw, headerCentre - 17, tw, 34);
-        // Wide enough for both of its texts.
-        const auto font = lookAndFeel.getTextButtonFont(playButton, 26);
-        const int pw = std::max(cssWidth(font, "PLAY"), cssWidth(font, "STOP")) + 2 * 12;
-        playButton.setBounds(tempo.getX() - 8 - pw, headerCentre - 13, pw, 26);
-        right = playButton.getX() - 14;
+        right = tempo.getX() - 14;
     }
     {
-        const int x = nameX + cssWidth(nameFont(), "RUBBER DUCK") + 10 + cssWidth(subtitleFont(), "revival") + 14;
-        fileName.setBounds(x, kHeaderY, std::max(0, right - x), kHeaderH);
-        fileName.setBaseline(static_cast<float>(kHeaderH / 2) + 5.0f);
+        const int x = nameX + cssWidth(nameFont(), "RUBDUCK") + 18;
+        preset.setBounds(x, headerCentre - 17, std::max(0, right - x), 34);
     }
 
     // Pattern row: 16 keys, SEQ RANGE, DRAG MIDI.
@@ -859,6 +854,16 @@ void RubberDuckEditor::resized()
     }
     {
         const auto area = content(master);
-        placeKnob("volume", area.getX() + (area.getWidth() - 64) / 2, area);
+        const int x = area.getX() + (area.getWidth() - 64) / 2;
+        if (processor.hasOwnTransport()) {
+            // The volume, with PLAY under it.
+            const auto size = RdKnob::sizeFor(false);
+            constexpr int keyH = 30, gap = 10;
+            const int y = area.getY() + (area.getHeight() - (size.getHeight() + gap + keyH)) / 2;
+            knob("volume").setBounds(x, y, size.getWidth(), size.getHeight());
+            playButton.setBounds(x, y + size.getHeight() + gap, size.getWidth(), keyH);
+        } else {
+            placeKnob("volume", x, area);
+        }
     }
 }

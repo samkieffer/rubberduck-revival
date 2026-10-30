@@ -64,7 +64,7 @@ juce::MidiFile fromPatterns(const std::vector<rd::Pattern>& patterns, double bpm
 
 juce::File writeTemporary(const juce::MidiFile& midi, const juce::String& name)
 {
-    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("Rubber Duck Revival");
+    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("RubDuck");
     folder.createDirectory();
     const auto file = folder.getChildFile(juce::File::createLegalFileName(name) + ".mid");
     file.deleteFile();

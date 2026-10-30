@@ -477,6 +477,37 @@ void VfdReadout::paint(juce::Graphics& g)
 
 // ---------------------------------------------------------------------------
 
+PlayKey::PlayKey() : juce::TextButton("PLAY") {}
+
+void PlayKey::paintButton(juce::Graphics& g, bool highlighted, bool down)
+{
+    auto* lf = RdLookAndFeel::of(*this);
+    if (lf == nullptr)
+        return;
+    const auto& t = lf->theme();
+    const auto r = getLocalBounds().toFloat();
+    auto face = t.stepA;
+    if (highlighted && !down)
+        face = face.interpolatedWith(juce::Colours::white, 0.06f);
+    lf->drawKey(g, r, 4.0f, face, t.stepAHi, t.stepLo, down);
+    const float shift = down ? 1.0f : 0.0f;
+    // The light, as on the step keys but wider.
+    const auto light = juce::Rectangle<float>(r.getWidth() - 24.0f, 3.0f).withCentre({r.getCentreX(), r.getY() + 6.5f + shift});
+    if (getToggleState()) {
+        juce::DropShadow(t.run.withAlpha(0.7f), 8, {}).drawForRectangle(g, light.toNearestInt());
+        g.setColour(t.run);
+    } else {
+        g.setColour(t.runOff);
+    }
+    g.fillRect(light);
+    g.setColour(t.stepNum);
+    g.setFont(rd::ui::font(Face::Ui700, 12.0f, 0.14f));
+    g.drawText(getButtonText(), r.withTrimmedTop(11.0f + shift).withTrimmedBottom(3.0f - shift),
+               juce::Justification::centred, false);
+}
+
+// ---------------------------------------------------------------------------
+
 namespace {
 
 const juce::String kBpmPrefix("BPM ");
@@ -551,43 +582,52 @@ void TempoVfd::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDet
 
 // ---------------------------------------------------------------------------
 
-void FileNameLabel::setFile(const juce::File& newFile)
+PresetVfd::PresetVfd()
+{
+    setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    setTooltip("Load a machine state (.h30)");
+}
+
+void PresetVfd::setFile(const juce::File& newFile)
 {
     if (newFile != file) {
         file = newFile;
-        setTooltip(file == juce::File() ? juce::String() : file.getFullPathName());
+        setTooltip(file == juce::File() ? "Load a machine state (.h30)" : file.getFullPathName());
         repaint();
     }
 }
 
-void FileNameLabel::setBaseline(float y)
-{
-    baseline = y;
-    repaint();
-}
-
-void FileNameLabel::paint(juce::Graphics& g)
+void PresetVfd::paint(juce::Graphics& g)
 {
     auto* lf = RdLookAndFeel::of(*this);
-    if (lf == nullptr || file == juce::File())
+    if (lf == nullptr)
         return;
     const auto& t = lf->theme();
-    constexpr float kTextX = 14.0f;  // after the rule
-    g.setColour(t.line);
-    g.fillRect(0.0f, baseline - 11.0f, 1.0f, 14.0f);
-
-    const auto font = rd::ui::font(Face::Name500, 11.0f);
-    const float room = static_cast<float>(getWidth()) - kTextX;
+    const auto font = vfdFont();
+    lf->drawVfdWindow(g, getLocalBounds().toFloat(), 4.0f);
+    const juce::String prefix("PRESET ");
+    auto r = getLocalBounds().toFloat().reduced(12.0f, 4.0f);
+    lf->drawGlowText(g, prefix, font, r.removeFromLeft(rd::ui::textWidth(font, prefix)),
+                     t.acid.withMultipliedAlpha(0.45f), juce::Justification::centredLeft, true);
+    if (file == juce::File()) {
+        lf->drawGlowText(g, juce::CharPointer_UTF8("\xe2\x80\x94"), font, r, t.acid.withMultipliedAlpha(0.3f),
+                         juce::Justification::centredLeft, false);
+        return;
+    }
     auto text = file.getFileNameWithoutExtension();
-    if (rd::ui::textWidth(font, text) > room) {
+    if (rd::ui::textWidth(font, text) > r.getWidth()) {
         const juce::String ellipsis = juce::CharPointer_UTF8("\xe2\x80\xa6");
-        while (text.isNotEmpty() && rd::ui::textWidth(font, text + ellipsis) > room)
+        while (text.isNotEmpty() && rd::ui::textWidth(font, text + ellipsis) > r.getWidth())
             text = text.dropLastCharacters(1);
         text = text.trimEnd() + ellipsis;
     }
-    g.setColour(t.ink);
-    g.setFont(font);
-    g.drawSingleLineText(text, juce::roundToInt(kTextX), juce::roundToInt(baseline));
+    lf->drawGlowText(g, text, font, r, t.acid, juce::Justification::centredLeft, true);
+}
+
+void PresetVfd::mouseDown(const juce::MouseEvent&)
+{
+    if (onClick)
+        onClick();
 }
 
 // ---------------------------------------------------------------------------

@@ -16,8 +16,8 @@ juce::Colour rgb(juce::uint32 c)
 juce::PropertiesFile::Options settingsOptions()
 {
     juce::PropertiesFile::Options o;
-    o.applicationName = "Rubber Duck Revival";
-    o.folderName = "Rubber Duck Revival";
+    o.applicationName = "RubDuck";
+    o.folderName = "RubDuck";
     o.filenameSuffix = ".settings";
     o.osxLibrarySubFolder = "Application Support";
     return o;
@@ -61,6 +61,8 @@ const Theme& Theme::dark()
         d.slideTie = rgb(0x4FC3F7).withAlpha(0.75f);
         d.play = rgb(0xFF4A3D);
         d.playOff = rgb(0x3A1E1B);
+        d.run = rgb(0x46E06E);
+        d.runOff = rgb(0x183522);
         d.cursor = rgb(0xFFF4D6);
         d.beak = rgb(0xFF7A1A);
         d.bigCap = d.acid;
@@ -131,6 +133,8 @@ const Theme& Theme::light()
         l.slideTie = rgb(0x1F8FC6);
         l.play = rgb(0xE8352A);
         l.playOff = rgb(0x7A3A34);
+        l.run = rgb(0x22B14C);
+        l.runOff = rgb(0x3C6646);
         l.cursor = rgb(0xFFF4D6);
         l.beak = rgb(0xFF7A1A);
         l.bigCap = rgb(0x1F1E1C);

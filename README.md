@@ -1,4 +1,4 @@
-# Rubber Duck Revival
+# RubDuck
 
 Recréation en plugin **AU / VST3** (et appli autonome) pour macOS du synthé-séquenceur
 **Rubber Duck H3O+** de *d-lusion interactive media* (1996-2000), une « virtual
@@ -41,20 +41,21 @@ cmake --build build --config Release -j
 La compilation télécharge JUCE puis copie automatiquement le plugin dans
 `~/Library/Audio/Plug-Ins/Components` (AU) et `~/Library/Audio/Plug-Ins/VST3` (VST3).
 L'appli autonome se trouve dans `build/plugin/RubberDuckRevival_artefacts/Release/Standalone/`.
-Sans hôte pour donner le transport, elle a le sien dans l'en-tête : *PLAY* / *STOP* (ou la
-barre d'espace) lance la séquence au début d'une mesure, et l'écran *BPM* règle le tempo
+Sans hôte pour donner le transport, elle a le sien : la touche *PLAY* / *STOP* sous le
+volume (section *Master*, trait vert allumé pendant la lecture), ou la barre d'espace, lance
+la séquence au début d'une mesure, et l'écran *BPM* de l'en-tête règle le tempo
 comme le bouton de l'original (60 à 250 BPM, par pas d'environ 0,75 BPM : glisser vers le
 haut ou le bas, ou molette). *LOAD* reprend le tempo du fichier, *SAVE* l'enregistre. Ces
 commandes n'existent pas dans Live, qui garde son transport et sa barre d'espace.
 
 Sans compiler : chaque build de la CI GitHub (onglet *Actions*, artefact
-`RubberDuckRevival-macOS`) contient l'AU, le VST3 et l'appli. Après décompression,
+`RubDuck-macOS`) contient l'AU, le VST3 et l'appli. Après décompression,
 retirer la quarantaine de macOS avant de copier les plugins :
-`xattr -dr com.apple.quarantine "Rubber Duck Revival.component" "Rubber Duck Revival.vst3"`.
+`xattr -dr com.apple.quarantine "RubDuck.component" "RubDuck.vst3"`.
 
 Image disque pour d'autres Mac : `scripts/make_dmg.sh` compile une version universelle
 (Apple Silicon et Intel, macOS 11 ou plus récent) dans `build-dist/` et produit
-`dist/RubberDuckRevival-<version>.dmg`. L'image contient un installeur `.pkg` (AU et VST3
+`dist/RubDuck-<version>.dmg`. L'image contient un installeur `.pkg` (AU et VST3
 dans `/Library/Audio/Plug-Ins`, appli dans `/Applications`, chaque partie peut être
 décochée) et un `LISEZ-MOI.txt`. L'installeur n'est pas signé par Apple : au premier
 lancement, Gatekeeper le bloque, et le LISEZ-MOI explique comment l'autoriser (Réglages
@@ -62,7 +63,12 @@ Système → Confidentialité et sécurité → « Ouvrir quand même »).
 
 Dans Ableton Live : Réglages → Plug-ins → activer « Use Audio Units v2 » et/ou
 « Use VST3 Plug-in System Folders », puis « Rescan ». Le plugin apparaît sous
-*Rubber Duck Revival* comme instrument.
+*RubDuck* comme instrument.
+
+Jusqu'à la 0.4, le plugin s'appelait « Rubber Duck Revival ». Ses codes n'ont pas changé,
+donc les projets Live le retrouvent sous son nouveau nom ; supprimer l'ancien
+`Rubber Duck Revival.component` / `.vst3` (dans `~/Library/Audio/Plug-Ins` ou
+`/Library/Audio/Plug-Ins`), sinon Live le voit en double.
 
 Vérifier que la compilation reproduit l'original au bit près :
 
@@ -131,11 +137,12 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
   v2.12). Pendant la lecture, le plugin passe aussitôt au pattern de départ du fichier,
   sans attendre la mesure. *SAVE* écrit un fichier relisible par l'original du
   moteur choisi, en proposant le nom du fichier en cours. Le nom du dernier fichier
-  chargé ou enregistré s'affiche dans l'en-tête (chemin complet en infobulle) et, dans
-  l'appli autonome, dans la barre de titre ; il est gardé avec le projet Live.
+  chargé ou enregistré s'affiche dans l'écran *PRESET* de l'en-tête (chemin complet en
+  infobulle ; un clic ouvre *LOAD*) et, dans l'appli autonome, dans la barre de titre ; il
+  est gardé avec le projet Live.
 - **Thème et version** : un clic sur le canard (en haut à gauche) choisit le thème sombre ou
   clair (réglage commun à toutes les instances, gardé dans
-  `~/Library/Application Support/Rubber Duck Revival`) et affiche la version (`0.4.0`…),
+  `~/Library/Application Support/RubDuck`) et affiche la version (`0.4.0`…),
   pour savoir quelle compilation Live a chargée.
 - **Fréquence d'échantillonnage** : exacte à 44,1 kHz. À 48 kHz ou plus, le signal est
   rééchantillonné (latence de quelques échantillons, compensée par Live).

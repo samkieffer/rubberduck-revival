@@ -696,16 +696,19 @@ int main(int argc, char** argv)
             if (const auto dir = juce::SystemStats::getEnvironmentVariable("RD_SNAPSHOT_DIR", {}); dir.isNotEmpty()) {
                 p->setMachineFile(juce::File("/Users/test/Patterns/Acid_was_my_first_love.h30"));
                 p->setTempoKnob(kKnob);
-                p->setTransportPlaying(true);
-                for (const auto theme : {rd::ui::ThemeKind::Dark, rd::ui::ThemeKind::Light}) {
-                    view->setTheme(theme, false);
-                    juce::MessageManager::getInstance()->runDispatchLoopUntil(120);
-                    const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 2.0f);
-                    const auto file = juce::File(dir).getChildFile(
-                        juce::String(theme == rd::ui::ThemeKind::Dark ? "dark" : "light") + "-standalone.png");
-                    file.deleteFile();
-                    juce::FileOutputStream os(file);
-                    juce::PNGImageFormat().writeImageToStream(image, os);
+                for (const bool playing : {false, true}) {
+                    p->setTransportPlaying(playing);
+                    for (const auto theme : {rd::ui::ThemeKind::Dark, rd::ui::ThemeKind::Light}) {
+                        view->setTheme(theme, false);
+                        juce::MessageManager::getInstance()->runDispatchLoopUntil(120);
+                        const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), true, 2.0f);
+                        const auto file = juce::File(dir).getChildFile(
+                            juce::String(theme == rd::ui::ThemeKind::Dark ? "dark" : "light")
+                            + (playing ? "-standalone.png" : "-standalone-stopped.png"));
+                        file.deleteFile();
+                        juce::FileOutputStream os(file);
+                        juce::PNGImageFormat().writeImageToStream(image, os);
+                    }
                 }
             }
         }

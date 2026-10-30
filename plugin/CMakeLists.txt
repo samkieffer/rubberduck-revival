@@ -23,9 +23,10 @@ else()
 endif()
 
 juce_add_plugin(RubberDuckRevival
-    PRODUCT_NAME "Rubber Duck Revival"
-    COMPANY_NAME "Rubber Duck Revival"
-    BUNDLE_ID com.samkieffer.rubberduckrevival
+    PRODUCT_NAME "RubDuck"
+    COMPANY_NAME "RubDuck"
+    BUNDLE_ID com.samkieffer.rubduck
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/AppIcon.png"  # from AppIcon.svg
     PLUGIN_MANUFACTURER_CODE Rdrv
     PLUGIN_CODE Rdh3
     FORMATS ${RD_FORMATS}

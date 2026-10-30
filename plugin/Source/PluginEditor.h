@@ -76,6 +76,7 @@ private:
     // in the window's title bar.
     void showMachineFile();
     void togglePlay();
+    void showPlaying();
     void loadFile();
     void saveFile();
     void saveMidi();
@@ -92,13 +93,13 @@ private:
     std::vector<std::pair<juce::String, std::unique_ptr<Knob>>> knobs;
     std::vector<std::pair<juce::String, std::unique_ptr<Toggle>>> toggles;
     DuckBadge duck;
-    FileNameLabel fileName;
+    PresetVfd preset;
     juce::File shownFile;
     VfdSelector config;
     juce::TextButton loadButton{"LOAD"}, saveButton{"SAVE"};
     // The standalone app's own transport (no host there): PLAY / STOP, also
     // on the space bar, and the tempo.
-    juce::TextButton playButton{"PLAY"};
+    PlayKey playButton;
     TempoVfd tempo;
     bool focusTaken = false;
     std::array<std::unique_ptr<PatternKey>, rd::kNumPatterns> patternKeys;

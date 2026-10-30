@@ -35,7 +35,7 @@ jobs:
       - name: Validate the Audio Unit (auval)
         run: |
           mkdir -p ~/Library/Audio/Plug-Ins/Components
-          cp -R "build/plugin/RubberDuckRevival_artefacts/Release/AU/Rubber Duck Revival.component" ~/Library/Audio/Plug-Ins/Components/
+          cp -R "build/plugin/RubberDuckRevival_artefacts/Release/AU/RubDuck.component" ~/Library/Audio/Plug-Ins/Components/
           killall -9 AudioComponentRegistrar || true
           sleep 2
           auval -v aumu Rdh3 Rdrv
@@ -45,19 +45,19 @@ jobs:
           curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
           unzip -q pluginval.zip
           ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests --validate-in-process \
-            --validate "build/plugin/RubberDuckRevival_artefacts/Release/VST3/Rubber Duck Revival.vst3"
+            --validate "build/plugin/RubberDuckRevival_artefacts/Release/VST3/RubDuck.vst3"
 
       - name: Package
         run: |
           cd build/plugin/RubberDuckRevival_artefacts/Release
-          ditto -c -k --keepParent "AU/Rubber Duck Revival.component" "$GITHUB_WORKSPACE/RubberDuckRevival-AU.zip"
-          ditto -c -k --keepParent "VST3/Rubber Duck Revival.vst3" "$GITHUB_WORKSPACE/RubberDuckRevival-VST3.zip"
-          ditto -c -k --keepParent "Standalone/Rubber Duck Revival.app" "$GITHUB_WORKSPACE/RubberDuckRevival-App.zip"
+          ditto -c -k --keepParent "AU/RubDuck.component" "$GITHUB_WORKSPACE/RubDuck-AU.zip"
+          ditto -c -k --keepParent "VST3/RubDuck.vst3" "$GITHUB_WORKSPACE/RubDuck-VST3.zip"
+          ditto -c -k --keepParent "Standalone/RubDuck.app" "$GITHUB_WORKSPACE/RubDuck-App.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RubberDuckRevival-macOS
-          path: RubberDuckRevival-*.zip
+          name: RubDuck-macOS
+          path: RubDuck-*.zip
 
   linux:
     # Engine only: quick bit-exactness check on x86-64.

@@ -145,6 +145,15 @@ private:
     juce::String text;
 };
 
+// The PLAY / STOP key of the standalone app, drawn like a step key: a green
+// light along its top lights up while the sequence plays (the toggle state).
+class PlayKey : public juce::TextButton
+{
+public:
+    PlayKey();
+    void paintButton(juce::Graphics&, bool highlighted, bool down) override;
+};
+
 // The tempo of the standalone app in a VFD, "BPM 155.4", set like the
 // original's tempo knob (0..255 = 60..250 BPM, about 0.75 BPM a step): drag
 // up or down, or scroll.
@@ -168,19 +177,20 @@ private:
     float wheelSteps = 0.0f;  // smooth scrolling, not yet a whole step
 };
 
-// Name of the machine state file in the header, after a thin rule, cut with an
-// ellipsis when too long; the tooltip gives the full path. Draws nothing
-// without a file. The text sits on `baseline` (from the top), like the name.
-class FileNameLabel : public juce::Component, public juce::SettableTooltipClient
+// The machine state file in a VFD like the configuration's: "PRESET name",
+// cut with an ellipsis when too long, "PRESET —" without a file. The tooltip
+// gives the full path; a click calls onClick (LOAD).
+class PresetVfd : public juce::Component, public juce::SettableTooltipClient
 {
 public:
+    PresetVfd();
+    std::function<void()> onClick;
     void setFile(const juce::File& newFile);
-    void setBaseline(float y);
     void paint(juce::Graphics&) override;
+    void mouseDown(const juce::MouseEvent&) override;
 
 private:
     juce::File file;
-    float baseline = 0.0f;
 };
 
 // The pixel duck, straight on the chassis; a click opens the theme menu.

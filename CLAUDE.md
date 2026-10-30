@@ -1,4 +1,4 @@
-# Rubber Duck Revival — notes for Claude
+# RubDuck (repository rubberduck-revival) — notes for Claude
 
 Goal: faithful re-implementation of d-lusion's Rubber Duck H3O+ as an AU/VST3/Standalone
 plugin for macOS (Apple Silicon), primarily used in Ableton Live 12. Two engines: v2.12

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Builds Rubber Duck Revival for other Macs and packages it as a disk image
+# Builds RubDuck for other Macs and packages it as a disk image
 # holding an installer (.pkg) and a read-me:
-#   dist/RubberDuckRevival-<version>.dmg
+#   dist/RubDuck-<version>.dmg
 #
 # The installer puts the AU and the VST3 in /Library/Audio/Plug-Ins and the
 # standalone app in /Applications. Binaries are universal (Apple Silicon and
@@ -19,15 +19,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION=$(sed -n 's/^project(RubberDuckRevival VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
-NAME="Rubber Duck Revival"
-ID="com.samkieffer.rubberduckrevival"
+NAME="RubDuck"
+ID="com.samkieffer.rubduck"
 MIN_MACOS="11.0"
 BUILD_DIR="build-dist"
 DIST_DIR="dist"
 WORK="${DIST_DIR}/work"
 STAGE="${WORK}/stage"
 ARTEFACTS="${BUILD_DIR}/plugin/RubberDuckRevival_artefacts/Release"
-DMG="${DIST_DIR}/RubberDuckRevival-${VERSION}.dmg"
+DMG="${DIST_DIR}/RubDuck-${VERSION}.dmg"
 
 # The macOS 27 SDK of the Command Line Tools does not link with Xcode's ld
 # ("unknown architecture arm64e.x1"): build against Xcode's SDK unless SDKROOT
