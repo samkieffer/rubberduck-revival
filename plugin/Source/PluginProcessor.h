@@ -84,7 +84,6 @@ public:
     bool isSequencerRunning() const { return sequencerRunning.load(); }
     float getHostBpm() const { return lastBpm.load(); }
     EngineKind getEngineKind() const { return static_cast<EngineKind>(paramInt(pEngine)); }
-    int numPatterns() const { return getEngineKind() == EngineKind::V102 ? rd::kNumPatternsV1 : rd::kNumPatterns; }
     // 32-step patterns: in Single mode the selected pattern plays with its pair
     // (0+1, 2+3...), one per bar, aligned to the host's odd and even bars.
     bool pairMode() const { return paramInt(pLength32) != 0; }

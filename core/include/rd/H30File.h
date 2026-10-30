@@ -42,7 +42,9 @@ struct H30File {
 
     // Writes a version-4 file as the original saver (0x404140) does.
     std::vector<uint8_t> serialize(const Engine& engine, int tempoKnobValue) const;
-    // Writes a version-2 file as the v1.02 saver (0x40b1c0) does.
+    // Writes a version-2 file as the v1.02 saver (0x40b1c0) does, followed,
+    // when patterns E or F are used, by RubDuck's block holding them (the
+    // original stops reading before it). Osc1 type 3 is RubDuck's triangle.
     std::vector<uint8_t> serialize(const EngineV1& engine, int tempoKnobValue) const;
 };
 

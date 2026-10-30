@@ -208,7 +208,7 @@ memory `+0`, then current pattern `+0xa80`, step `+0xa88`, range start/end
 pattern in the range at each bar, 2 random `start + rand()·(end − start + 1)/32767`,
 which picks `end + 1` when `rand()` returns 32767. Range checks accept index 14,
 one past the last pattern, which then reads the sequencer state and the sample
-deck; that case plays as rests here.
+deck; here (RubDuck 2.0, 16 patterns) index 14 is pattern E, rests while empty.
 
 ## .h30 files
 
@@ -222,6 +222,12 @@ int32 tempo knob, volume, tune, accent, uint8 osc1, uint8 osc2, int32 osc2×2, m
 cutoff, attack, decay, modulation, resonance, play mode,
 distortion amount, distortion curve, delay time, delay gain, delay feedback
 ```
+
+RubDuck's extensions (2.0, not in the original): osc1 type 3 is a triangle (v2.12's
+waveform; the original keeps the previous waveform for unknown types), and when
+patterns E or F are used the file goes on with `CString "RubDuck", int32 1` and those
+two patterns in the same step layout. Without them the file is byte for byte what the
+v1.02 saver writes.
 
 Unlike v2.12, the v1.02 loader applies the volume. The v2.12 loader reads this
 format as "song 0..range end", ignores the play mode and swaps the two

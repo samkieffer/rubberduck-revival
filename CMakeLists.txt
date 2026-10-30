@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(RubberDuckRevival VERSION 0.4.0 LANGUAGES C CXX)
+project(RubberDuckRevival VERSION 2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,6 +45,10 @@ if(RD_BUILD_TOOLS)
     add_executable(engine_v1_sync tests/EngineV1SyncTest.cpp)
     target_link_libraries(engine_v1_sync PRIVATE rdcore)
     add_test(NAME engine_v1_sync COMMAND engine_v1_sync "${CMAKE_SOURCE_DIR}/tests/fixtures")
+    # RubDuck's extensions of the v1.02 engine: patterns E and F, triangle.
+    add_executable(v1_extensions tests/V1ExtensionsTest.cpp)
+    target_link_libraries(v1_extensions PRIVATE rdcore)
+    add_test(NAME v1_extensions COMMAND v1_extensions)
     # The installer's own patterns (not in the repository): -DRD_CONTENT_DIR=/path/to/content
     set(RD_CONTENT_DIR "${CMAKE_SOURCE_DIR}/reference/content" CACHE PATH "Original pattern files")
     if(EXISTS "${RD_CONTENT_DIR}/Acid_was_my_first_love.h30")

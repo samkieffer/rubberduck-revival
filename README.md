@@ -8,13 +8,16 @@ Le plugin contient **deux moteurs**, au choix (réglage *Engine*) :
 
 - **v1.02 (1997)**, celui de `RUBDUCK.EXE` : blocs de 64 échantillons, filtre à deux
   étages dont la coupure et la résonance suivent l'enveloppe, distorsion à courbe
-  logarithmique, 14 patterns ;
+  logarithmique, 14 patterns dans l'original — 16 (0 à F) dans RubDuck, plus une onde
+  triangle reprise de la v2.12 (depuis la 2.0) ;
 - **v2.12 (2000)**, celui de `rdh3o.exe` : filtre à deux branches avec Squelch, Drive,
   Tweak et Tweet, 16 patterns et « song ».
 
 Chaque moteur a été reconstitué à partir de l'exécutable d'origine et produit
 **exactement les mêmes échantillons** que lui (vérifié au bit près sur les patterns
-fournis avec l'installeur et sur des patterns de test aléatoires). Le plugin les rend
+fournis avec l'installeur et sur des patterns de test aléatoires). Les ajouts de RubDuck
+au moteur v1.02 (patterns E et F, triangle) ne servent pas dans les fichiers d'origine,
+qui sonnent comme avant. Le plugin les rend
 pilotables depuis Ableton Live : automation de tous les réglages, changement de pattern,
 synchro au tempo et au transport.
 
@@ -82,7 +85,11 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
 
 - **Moteur** (segment `ENG` de la fenêtre de configuration, en haut) : v1.02 (par défaut pour une nouvelle instance) ou v2.12. Les
   réglages sont communs ; ceux qui n'existent pas en v1.02 (Squelch, Drive, m, Tweak,
-  Tweet, onde triangle, patterns E et F) sont grisés. En v1.02, *Dist Gain* règle la
+  Tweet) sont grisés. Depuis la 2.0, la v1.02 a aussi les patterns E et F (y compris
+  dans *SEQ RANGE*) et l'onde triangle, absents de l'original. En v1.02, *SAVE* écrit le
+  format d'origine (version 2) ; s'ils servent, les patterns E et F suivent dans un bloc
+  « RubDuck » en fin de fichier, que l'original ne lit pas, et le triangle est enregistré
+  sous un numéro d'onde que l'original ignore. En v1.02, *Dist Gain* règle la
   part de distorsion et *Dist Drive* la courbe. Les projets enregistrés avant l'ajout du
   moteur v1.02 se rouvrent en v2.12.
 - **Séquenceur** : les patterns tournent avec le transport de Live, au tempo de Live
@@ -142,7 +149,7 @@ cmake -S . -B build -DRD_CONTENT_DIR="/chemin/vers/RubberDuck_H3O_2.12/content" 
   est gardé avec le projet Live.
 - **Thème et version** : un clic sur le canard (en haut à gauche) choisit le thème sombre ou
   clair (réglage commun à toutes les instances, gardé dans
-  `~/Library/Application Support/RubDuck`) et affiche la version (`0.4.0`…),
+  `~/Library/Application Support/RubDuck`) et affiche la version (`2.0`…),
   pour savoir quelle compilation Live a chargée.
 - **Fréquence d'échantillonnage** : exacte à 44,1 kHz. À 48 kHz ou plus, le signal est
   rééchantillonné (latence de quelques échantillons, compensée par Live).

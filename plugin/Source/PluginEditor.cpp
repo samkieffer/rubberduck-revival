@@ -188,7 +188,6 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     preset.onClick = [this] { loadFile(); };
     addAndMakeVisible(preset);
 
-    osc1.isChoiceEnabled = [this](int i) { return i != 0 || !isV1(); };  // no triangle in v1.02
     osc1.setTooltip("Oscillator 1 waveform");
     osc2.setTooltip("Oscillator 2 waveform");
     addAndMakeVisible(osc1);
@@ -506,8 +505,8 @@ void RubberDuckEditor::saveMidi()
 
 void RubberDuckEditor::updateEngineControls()
 {
-    // v1.02 has no Squelch/Drive filter branch, no triangle and 14 patterns;
-    // its sequence modes play a pattern range instead of the song.
+    // v1.02 has no Squelch/Drive filter branch; its sequence modes play a
+    // pattern range instead of the song.
     const bool v1 = isV1();
     for (const char* id : {"squelch", "drive"})
         knob(id).setEnabled(!v1);
@@ -515,9 +514,6 @@ void RubberDuckEditor::updateEngineControls()
         toggle(id).setEnabled(!v1);
     // The range is only played by the v1.02 Sequence and Random modes.
     range.setActive(v1 && playMode() != 0);
-    for (int i = 0; i < rd::kNumPatterns; ++i)
-        patternKeys[static_cast<size_t>(i)]->setEnabled(i < processor.numPatterns());
-    osc1.repaint();
     resized();
     repaint();
 }

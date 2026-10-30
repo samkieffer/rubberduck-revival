@@ -11,7 +11,13 @@ namespace rd {
 
 // Engine of Rubber Duck H3O+ v1.02 (RUBDUCK.EXE, June 1997): a different
 // voice from v2.12, processing 64-sample blocks at 44.1 kHz.
+//
+// RubDuck extends it beyond the original (version 2.0): 16 patterns (0-F)
+// instead of 14, and a triangle oscillator 1 taken from v2.12. Both are
+// unused by original files, which play as before.
 constexpr unsigned kBlockSizeV1 = 64;
+// Patterns of the original v1.02 and of its files (0-D); the engine has
+// kNumPatterns, like v2.12.
 constexpr int kNumPatternsV1 = 14;
 
 // Sound parameters in the original's units. Comments give the offset in the
@@ -19,7 +25,7 @@ constexpr int kNumPatternsV1 = 14;
 // default set by its constructor 0x40c720 / 0x40c640.
 struct ParamsV1 {
     int32_t accent = 200;          // +0x08
-    uint8_t osc1Type = 1;          // +0x0c: 0 saw/pulse, 1 saw, 2 square
+    uint8_t osc1Type = 1;          // +0x0c: 0 saw/pulse, 1 saw, 2 square (3 triangle: RubDuck's)
     uint8_t osc2Type = 0;          // +0x0d: 0 sine (octave up), 1 saw, 2 noise
     int32_t osc2Double = 0;        // +0x10: osc2 an octave up, free running
     int32_t tune = 0;              // +0x14: knob - 128
@@ -54,7 +60,7 @@ public:
     void reset();
 
     ParamsV1 params;
-    std::array<Pattern, kNumPatternsV1> patterns{};
+    std::array<Pattern, kNumPatterns> patterns{};
     int32_t rangeStart = 0;        // +0xa8c
     int32_t rangeEnd = 0;          // +0xa90
     PlayModeV1 playMode = PlayModeV1::Single;
@@ -189,7 +195,6 @@ private:
 
     Random rng;
     std::array<int16_t, kBlockSizeV1> bufB{};
-    std::array<Pattern, 1> bogus{};
 };
 
 } // namespace rd

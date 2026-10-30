@@ -10,12 +10,17 @@ namespace {
 
 const char kSignature[] = "Rubber Duck H3O+ * D-LUSiON";
 const char kOldSignature[] = "RuBBeR DuCK Sequence * D-LUSiON";  // version 1 files (1996)
+// RubDuck's block after a version-2 file: the v1.02 engine's patterns E and F,
+// which the original's 14 patterns leave out (see serialize).
+const char kRubDuckTag[] = "RubDuck";
+constexpr int32_t kRubDuckBlockVersion = 1;
 
 class Reader
 {
 public:
     Reader(const uint8_t* d, size_t n) : data(d), size(n) {}
     bool ok() const { return !failed; }
+    bool atEnd() const { return pos >= size; }
     uint8_t u8()
     {
         if (pos + 1 > size) { failed = true; return 0; }
@@ -53,6 +58,32 @@ void writeI32(std::vector<uint8_t>& out, int32_t v)
     out.insert(out.end(), b, b + 4);
 }
 
+void writePattern(std::vector<uint8_t>& out, const Pattern& pat)
+{
+    for (const auto& st : pat.steps) {
+        out.push_back(static_cast<uint8_t>(st.note));
+        writeI32(out, st.accent);
+        writeI32(out, st.slide);
+    }
+}
+
+void readPattern(Reader& r, Pattern& pat)
+{
+    for (auto& st : pat.steps) {
+        st.note = static_cast<int8_t>(r.u8());
+        st.accent = r.i32();
+        st.slide = r.i32();
+    }
+}
+
+bool isEmpty(const Pattern& pat)
+{
+    for (const auto& st : pat.steps)
+        if (st.note != Step{}.note || st.accent != 0 || st.slide != 0)
+            return false;
+    return true;
+}
+
 } // namespace
 
 bool H30File::parse(const uint8_t* data, size_t size, H30File& f, std::string* error)
@@ -79,16 +110,12 @@ bool H30File::parse(const uint8_t* data, size_t size, H30File& f, std::string* e
         f.songLength = f.rangeEnd + 1;
         for (int i = 0; i < f.songLength && i < kSongLength; ++i)
             f.song[static_cast<size_t>(i)] = static_cast<uint8_t>(i);
-        patternCount = 14;
+        patternCount = kNumPatternsV1;
     } else {
         return fail("unsupported file version");
     }
     for (int p = 0; p < patternCount; ++p)
-        for (auto& st : f.patterns[static_cast<size_t>(p)].steps) {
-            st.note = static_cast<int8_t>(r.u8());
-            st.accent = r.i32();
-            st.slide = r.i32();
-        }
+        readPattern(r, f.patterns[static_cast<size_t>(p)]);
     if (!r.ok())
         return fail("truncated file");
 
@@ -133,6 +160,15 @@ bool H30File::parse(const uint8_t* data, size_t size, H30File& f, std::string* e
     if (!r.ok())
         return fail("truncated parameter block");
     f.hasParams = true;
+    // Patterns E and F of a version-2 file written by RubDuck; the original
+    // stops reading before them.
+    if (f.version == 2 && !r.atEnd() && r.str() == kRubDuckTag) {
+        r.i32();  // block version (1)
+        for (int i = kNumPatternsV1; i < kNumPatterns; ++i)
+            readPattern(r, f.patterns[static_cast<size_t>(i)]);
+        if (!r.ok())
+            return fail("truncated RubDuck block");
+    }
     return true;
 }
 
@@ -171,8 +207,7 @@ void H30File::applyTo(Engine& e) const
 
 void H30File::applyTo(EngineV1& e) const
 {
-    for (int i = 0; i < kNumPatternsV1; ++i)
-        e.patterns[static_cast<size_t>(i)] = patterns[static_cast<size_t>(i)];
+    e.patterns = patterns;
     if (version < 3) {
         e.rangeStart = rangeStart;
         e.rangeEnd = rangeEnd;
@@ -180,12 +215,12 @@ void H30File::applyTo(EngineV1& e) const
         // Song of a later version: its first pattern, or the range it spans.
         int hi = 0;
         for (int i = 0; i < songLength && i < kSongLength; ++i)
-            if (song[static_cast<size_t>(i)] < kNumPatternsV1 && song[static_cast<size_t>(i)] > hi)
+            if (song[static_cast<size_t>(i)] < kNumPatterns && song[static_cast<size_t>(i)] > hi)
                 hi = song[static_cast<size_t>(i)];
         e.rangeStart = 0;
         e.rangeEnd = hi;
     }
-    e.selectPattern(version < 3 ? rangeStart : (song[0] < kNumPatternsV1 ? song[0] : 0));
+    e.selectPattern(version < 3 ? rangeStart : (song[0] < kNumPatterns ? song[0] : 0));
     if (!hasParams) {
         e.reset();
         return;
@@ -212,8 +247,8 @@ void H30File::applyTo(EngineV1& e) const
         if (extra >= 0 && extra <= 2)
             e.playMode = static_cast<PlayModeV1>(extra);
     } else {
-        // v2.12 numbering: triangle has no v1.02 counterpart and plays as saw.
-        static const uint8_t kOsc1[4] = {1, 0, 1, 2};
+        // v2.12 numbering (triangle is RubDuck's 3 in the v1.02 engine).
+        static const uint8_t kOsc1[4] = {3, 0, 1, 2};
         p.osc1Type = version == 3 ? osc1Raw : kOsc1[params.osc1Type & 3];
         p.osc2Type = params.osc2Type;
         p.distortionAmount = params.distortionGain;
@@ -231,12 +266,8 @@ std::vector<uint8_t> H30File::serialize(const EngineV1& e, int tempoKnobValue) c
     writeI32(out, 2);
     writeI32(out, e.rangeStart);
     writeI32(out, e.rangeEnd);
-    for (const auto& pat : e.patterns)
-        for (const auto& st : pat.steps) {
-            out.push_back(static_cast<uint8_t>(st.note));
-            writeI32(out, st.accent);
-            writeI32(out, st.slide);
-        }
+    for (int i = 0; i < kNumPatternsV1; ++i)
+        writePattern(out, e.patterns[static_cast<size_t>(i)]);
     const ParamsV1& p = e.params;
     writeI32(out, tempoKnobValue);
     writeI32(out, p.volume);
@@ -257,6 +288,18 @@ std::vector<uint8_t> H30File::serialize(const EngineV1& e, int tempoKnobValue) c
     writeI32(out, p.delayTime);
     writeI32(out, p.delayGain);
     writeI32(out, p.delayFeedback);
+    // Patterns E and F, when used, in RubDuck's block: without them the file is
+    // what the original saver writes.
+    bool extended = false;
+    for (int i = kNumPatternsV1; i < kNumPatterns; ++i)
+        extended = extended || !isEmpty(e.patterns[static_cast<size_t>(i)]);
+    if (extended) {
+        out.push_back(static_cast<uint8_t>(sizeof(kRubDuckTag) - 1));
+        out.insert(out.end(), kRubDuckTag, kRubDuckTag + sizeof(kRubDuckTag) - 1);
+        writeI32(out, kRubDuckBlockVersion);
+        for (int i = kNumPatternsV1; i < kNumPatterns; ++i)
+            writePattern(out, e.patterns[static_cast<size_t>(i)]);
+    }
     return out;
 }
 

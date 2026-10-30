@@ -78,8 +78,6 @@ EngineV1::EngineV1()
     for (auto& p : patterns)
         for (auto& s : p.steps)
             s = Step{};
-    for (auto& s : bogus[0].steps)
-        s = Step{};
     delay.init(0x3fc, kSampleRateV1);
     delay.set(0, 0.0f, 0.0f);
     setTempoKnob(0x36);
@@ -113,7 +111,7 @@ void EngineV1::setTempoKnob(int knob)
 
 void EngineV1::selectPattern(int index)
 {
-    if (index >= 0 && index < kNumPatternsV1)
+    if (index >= 0 && index < kNumPatterns)
         currentPattern = index;
 }
 
@@ -173,17 +171,16 @@ void EngineV1::noteOff()
 
 const Step& EngineV1::stepData(int pattern, int index) const
 {
-    // Index 14 passes the original's range check (< 15) but lies past the 14
-    // patterns, over the sequencer state and the sample deck; its contents are
-    // not reproducible, so it plays as rests.
-    if (pattern >= kNumPatternsV1)
-        return bogus[0].steps[static_cast<size_t>(index)];
     return patterns[static_cast<size_t>(pattern)].steps[static_cast<size_t>(index)];
 }
 
 void EngineV1::changePattern(int index)
 {
-    if (index < 0xf && index >= 0)
+    // The original checks index < 15, one past its 14 patterns: Random mode
+    // can pick rangeEnd + 1, and index 14 lay over the sequencer state, not
+    // reproducible, so it played as rests here. With 16 patterns, index 14 is
+    // pattern E, rests too while it is empty.
+    if (index < kNumPatterns && index >= 0)
         currentPattern = index;
 }
 
@@ -291,6 +288,11 @@ void EngineV1::oscillator(uint8_t kind, int32_t freq, Voice& v, int16_t* buf)
     case 5:  // noise (unipolar)
         for (unsigned i = 0; i < kBlockSizeV1; ++i, v.phase += v.increment)
             buf[i] = static_cast<int16_t>(rng.next());
+        break;
+    case 6:  // triangle, RubDuck's: v2.12's waveform (the original has none)
+        for (unsigned i = 0; i < kBlockSizeV1; ++i, v.phase += v.increment)
+            buf[i] = v.phase < 0x80000000u ? static_cast<int16_t>((v.phase >> 15) - 0x8000)
+                                           : static_cast<int16_t>(((~v.phase) >> 15) - 0x7fff);
         break;
     default:
         break;
@@ -484,12 +486,13 @@ void EngineV1::render(int16_t* out, unsigned blocks)
         filter.damping = static_cast<float>(1.0 / (2.0 - 0.0 * -400.0f));
         filter.b1 = filter.l1 = filter.b2 = filter.l2 = 0.0f;
     }
-    // Oscillator types (only values the original knows change the waveform).
-    static const uint8_t kOsc1Kinds[3] = {2, 3, 4};
+    // Oscillator types (only values the original knows change the waveform,
+    // and RubDuck's triangle).
+    static const uint8_t kOsc1Kinds[4] = {2, 3, 4, 6};
     static const uint8_t kOsc2Kinds[3] = {1, 3, 5};
     if ((paramFlags & 2) || params.osc1Type != lastOsc1 || params.osc2Type != lastOsc2) {
         paramFlags &= ~2;
-        if (params.osc1Type < 3)
+        if (params.osc1Type < 4)
             osc1Kind = kOsc1Kinds[params.osc1Type];
         if (params.osc2Type < 3)
             osc2Kind = kOsc2Kinds[params.osc2Type];

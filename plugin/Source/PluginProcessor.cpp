@@ -13,10 +13,10 @@ constexpr int kAccentVelocity = RubberDuckProcessor::kAccentVelocity;
 constexpr int kMidiToPatternNote = RubberDuckProcessor::kMidiToPatternNote;
 constexpr int kPatternSelectLowNote = 36; // in pattern mode, C2..D#3 select patterns 1..16
 
-// Osc1 choice (v2.12 numbering) to v1.02's three waveforms and back; v1.02 has
-// no triangle and plays it as a saw.
-constexpr uint8_t kOsc1ToV1[4] = {1, 0, 1, 2};
-constexpr int kOsc1FromV1[3] = {1, 2, 3};
+// Osc1 choice (v2.12 numbering) to the v1.02 engine's waveforms and back (its
+// triangle, 3, is RubDuck's).
+constexpr uint8_t kOsc1ToV1[4] = {3, 0, 1, 2};
+constexpr int kOsc1FromV1[4] = {1, 2, 3, 0};
 
 int tempoKnobFor(float bpm)
 {
@@ -69,7 +69,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RubberDuckProcessor::createL
     choice("source", "Sequencer Source", {"Patterns", "MIDI notes"}, 0);
     choice("quantize", "Pattern Change", {"Next bar", "Next step", "Immediate"}, 0);
     // v1.02 sequence and random modes play a range of patterns (not the song).
-    const StringArray v1Patterns{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D"};
+    const StringArray v1Patterns{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"};
     choice("rangestart", "Range From (v1.02)", v1Patterns, 0);
     choice("rangeend", "Range To (v1.02)", v1Patterns, 0);
     toggle("length32", "32-Step Patterns", false);
@@ -196,7 +196,7 @@ void RubberDuckProcessor::handleMidi(const juce::MidiMessage& m)
 {
     const auto source = static_cast<Source>(paramInt(pSource));
     if (m.isProgramChange()) {
-        if (m.getProgramChangeNumber() < numPatterns()) {
+        if (m.getProgramChangeNumber() < rd::kNumPatterns) {
             desiredPattern = m.getProgramChangeNumber();
             patternChangePending = true;
         }
@@ -205,7 +205,7 @@ void RubberDuckProcessor::handleMidi(const juce::MidiMessage& m)
     if (source == Source::Patterns) {
         if (m.isNoteOn()) {
             const int index = m.getNoteNumber() - kPatternSelectLowNote;
-            if (index >= 0 && index < numPatterns()) {
+            if (index >= 0 && index < rd::kNumPatterns) {
                 desiredPattern = index;
                 patternChangePending = true;
             }
@@ -407,8 +407,7 @@ void RubberDuckProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
             engine.patterns = sequence.patterns;
             engine.song = sequence.song;
             engine.songLength = std::max(1, sequence.songLength);
-            for (int i = 0; i < rd::kNumPatternsV1; ++i)
-                engineV1.patterns[static_cast<size_t>(i)] = sequence.patterns[static_cast<size_t>(i)];
+            engineV1.patterns = sequence.patterns;
             sequenceDirty.store(false);
         }
     }
@@ -540,15 +539,15 @@ bool RubberDuckProcessor::importH30(const juce::File& file, juce::String& error)
     if (v1) {
         rd::EngineV1 e;
         h30.applyTo(e);
-        setParam(apvts, "rangestart", static_cast<float>(juce::jlimit(0, rd::kNumPatternsV1 - 1, e.rangeStart)));
-        setParam(apvts, "rangeend", static_cast<float>(juce::jlimit(0, rd::kNumPatternsV1 - 1, e.rangeEnd)));
+        setParam(apvts, "rangestart", static_cast<float>(juce::jlimit(0, rd::kNumPatterns - 1, e.rangeStart)));
+        setParam(apvts, "rangeend", static_cast<float>(juce::jlimit(0, rd::kNumPatterns - 1, e.rangeEnd)));
         setParam(apvts, "pattern", static_cast<float>(1 + e.currentPatternIndex()));
         if (h30.hasParams) {
             const rd::ParamsV1& p = e.params;
             setParam(apvts, "volume", static_cast<float>(p.volume));
             setParam(apvts, "tune", static_cast<float>(p.tune));
             setParam(apvts, "accent", static_cast<float>(p.accent));
-            if (p.osc1Type < 3)
+            if (p.osc1Type < 4)
                 setParam(apvts, "osc1", static_cast<float>(kOsc1FromV1[p.osc1Type]));
             if (p.osc2Type < 3)
                 setParam(apvts, "osc2", static_cast<float>(p.osc2Type));
@@ -610,10 +609,9 @@ bool RubberDuckProcessor::exportH30(const juce::File& file) const
     const int knob = hasOwnTransport() ? getTempoKnob() : tempoKnobFor(lastBpm.load());
     rd::H30File h30;
     if (getEngineKind() == EngineKind::V102) {
-        // Version 2, the v1.02 format.
+        // Version 2, the v1.02 format (patterns E and F in RubDuck's block).
         rd::EngineV1 snapshot;
-        for (int i = 0; i < rd::kNumPatternsV1; ++i)
-            snapshot.patterns[static_cast<size_t>(i)] = d.patterns[static_cast<size_t>(i)];
+        snapshot.patterns = d.patterns;
         snapshot.rangeStart = get("rangestart");
         snapshot.rangeEnd = get("rangeend");
         snapshot.playMode = static_cast<rd::PlayModeV1>(get("playmode"));

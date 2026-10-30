@@ -8,6 +8,11 @@ Fidelity to the original sound is the top priority. The engine is re-derived fro
 decompiled original (see `docs/reverse-engineering.md`), not designed from scratch: when
 in doubt, match what the original code does, including its integer/fixed-point quirks.
 
+Deliberate extensions (version 2.0, Sam's choice): the v1.02 engine has 16 patterns and
+v2.12's triangle. Original files must still load and sound exactly as in the original;
+files RubDuck writes may deviate from the original format (nobody reads them with the
+original any more).
+
 ## Layout
 - `core/`   portable C++17 engines, no dependencies, run internally at 44.1 kHz like the originals.
 - `tools/`  CLI tools (render `.h30` to WAV, A/B comparison).

@@ -307,6 +307,56 @@ int main(int argc, char** argv)
         tmp.deleteFile();
     }
 
+    // 8b. Since 2.0 the v1.02 engine has patterns E and F and the triangle:
+    //     they play, the editor offers them and a version-2 file keeps them.
+    {
+        auto play = [](RubberDuckProcessor& p) {
+            FakeHost host;
+            p.setPlayHead(&host);
+            p.prepareToPlay(44100, 441);
+            return run(p, host, 1.0, 441);
+        };
+        DemoProcessor a;  // on v1.02, like every new instance
+        auto d = a.getSequence();
+        d.patterns[15].steps[0].note = 55;
+        d.patterns[15].steps[3].slide = 1;
+        a.setSequence(d);
+        setParam(a, "pattern", 16.0f);
+        setParam(a, "osc1", 0.0f);  // Triangle
+        setParam(a, "rangestart", 14.0f);
+        setParam(a, "rangeend", 15.0f);
+        const auto tri = play(a);
+        check(a.getEngineKind() == RubberDuckProcessor::EngineKind::V102 && a.getPlayingPattern() == 15 && rms(tri) > 0.01,
+              "v1.02: pattern F plays");
+        DemoProcessor saw;
+        saw.setSequence(d);
+        setParam(saw, "pattern", 16.0f);
+        setParam(saw, "osc1", 2.0f);  // Saw
+        check(play(saw) != tri, "v1.02: the triangle is not the saw");
+
+        std::unique_ptr<juce::AudioProcessorEditor> editor(a.createEditor());
+        int keys = 0, enabled = 0;
+        for (auto* c : editor->getChildren())
+            if (auto* key = dynamic_cast<PatternKey*>(c)) {
+                keys++;
+                enabled += key->isEnabled() ? 1 : 0;
+            }
+        check(keys == 16 && enabled == 16, "v1.02: the editor offers patterns E and F");
+        editor.reset();
+
+        auto tmp = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("rd_v1_extensions.h30");
+        check(a.exportH30(tmp), "v1.02: export with E, F and the triangle");
+        RubberDuckProcessor b;
+        juce::String err;
+        const bool loaded = b.importH30(tmp, err);
+        auto get = [&b](const char* id) { return std::lround(b.apvts.getRawParameterValue(id)->load()); };
+        const auto& f = b.getSequence().patterns[15].steps;
+        check(loaded && b.getEngineKind() == RubberDuckProcessor::EngineKind::V102 && get("osc1") == 0
+                  && get("rangestart") == 14 && get("rangeend") == 15 && f[0].note == 55 && f[3].slide == 1,
+              "v1.02: patterns E-F, range and triangle survive the file");
+        tmp.deleteFile();
+    }
+
     // 9. A project saved before the engine choice existed stays on v2.12.
     {
         DemoProcessor a;
@@ -344,7 +394,7 @@ int main(int argc, char** argv)
         check(p.getPlayingPattern() == 3, "v1.02: pattern change applied at the next bar");
         setParam(p, "pattern", 16.0f);
         run(p, host, 2.1, 256);
-        check(p.getPlayingPattern() == 3, "v1.02: patterns past 14 are ignored");
+        check(p.getPlayingPattern() == 15, "v1.02: pattern F (since 2.0) applied at the next bar");
     }
 
     // 11. v1.02 live notes from the very first block.
