@@ -295,6 +295,9 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
         setWantsKeyboardFocus(true);
     }
     addAndMakeVisible(stepEditor);
+    // The knobs made their value boxes before joining the editor, with JUCE's
+    // default look and feel (outline, system font): make them again with ours.
+    sendLookAndFeelChange();
 
     setSize(kWidth, editorHeight());
     timerCallback();

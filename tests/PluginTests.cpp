@@ -450,6 +450,22 @@ int main(int argc, char** argv)
     {
         DemoProcessor p;
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+        // As opened, before any theme change: the knobs' values have no outline
+        // and use the VFD font, like the rest of the editor.
+        {
+            int boxes = 0, styled = 0;
+            const auto vfd = rd::ui::font(rd::ui::Face::Vfd, 10.5f);
+            for (auto* c : editor->getChildren())
+                if (dynamic_cast<RdKnob*>(c) != nullptr)
+                    for (auto* k : c->getChildren())
+                        if (auto* box = dynamic_cast<juce::Label*>(k)) {
+                            boxes++;
+                            if (box->findColour(juce::Label::outlineColourId).isTransparent()
+                                && box->getFont().getTypefaceName() == vfd.getTypefaceName())
+                                styled++;
+                        }
+            check(boxes == 16 && styled == boxes, "knob values styled as the editor opens");
+        }
         // Renders do not depend on the theme preference of this machine.
         if (auto* e = dynamic_cast<RubberDuckEditor*>(editor.get()))
             e->setTheme(rd::ui::ThemeKind::Dark, false);
