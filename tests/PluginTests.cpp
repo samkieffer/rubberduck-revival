@@ -617,6 +617,33 @@ int main(int argc, char** argv)
         check(cornersOk, "tooltip corners show the editor");
     }
 
+    // 15a. Tracker piano: every key of both rows plays its semitone, the black
+    //      keys on the row above the white ones (G# on H, A on N).
+    {
+        DemoProcessor p;
+        std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+        StepEditor* steps = nullptr;
+        for (auto* c : editor->getChildren())
+            if (auto* s = dynamic_cast<StepEditor*>(c))
+                steps = s;
+        using namespace keylayout;
+        const Position lower[] = {Z, S, X, D, C, V, G, B, H, N, J, M, Comma, L, Period, Semicolon, Slash};
+        const Position upper[] = {Q, K2, W, K3, E, R, K5, T, K6, Y, K7, U, I, K9, O, K0, P};
+        bool ok = steps != nullptr;
+        int typed = 0;
+        auto play = [&](Position position, int expected) {
+            const auto c = static_cast<juce::juce_wchar>(characterAt(position));
+            steps->keyPressed(juce::KeyPress(static_cast<int>(c), {}, c));
+            const auto step = static_cast<size_t>(typed++ % rd::kStepsPerPattern);
+            ok = ok && p.getSequence().patterns[0].steps[step].note == expected;
+        };
+        for (int i = 0; ok && i < 17; ++i)
+            play(lower[i], 48 + i);
+        for (int i = 0; ok && i < 17; ++i)
+            play(upper[i], 60 + i);
+        check(ok, "keyboard entry: every key of both rows plays its semitone");
+    }
+
     // 15e. A slide step glides from the note before it: its tie comes in from
     //      the previous step. Drawn alone, the LED is the column changed the
     //      most, with the tie on its left (only the glow on its right).

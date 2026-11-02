@@ -71,7 +71,7 @@ void StepEditor::buildKeyMap()
     using namespace keylayout;
     // Tracker piano: the lower row from C of the entry octave, the upper row
     // an octave higher, black keys on the row above each.
-    static const Position lower[] = {Z, S, X, D, C, V, G, B, N, H, J, M, Comma, L, Period, Semicolon, Slash};
+    static const Position lower[] = {Z, S, X, D, C, V, G, B, H, N, J, M, Comma, L, Period, Semicolon, Slash};
     static const Position upper[] = {Q, K2, W, K3, E, R, K5, T, K6, Y, K7, U, I, K9, O, K0, P};
     noteKeys.clear();
     int semitone = 0;
