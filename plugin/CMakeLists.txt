@@ -48,6 +48,7 @@ target_sources(RubberDuckRevival PRIVATE
     Source/MidiExport.cpp
     Source/Theme.cpp
     Source/RdLookAndFeel.cpp
+    Source/StandaloneApp.cpp
     Source/Widgets.cpp)
 
 # Interface fonts (SIL Open Font License, see Fonts/OFL-*.txt).

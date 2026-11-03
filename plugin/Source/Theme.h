@@ -33,6 +33,9 @@ struct Theme {
 // "~/Library/Application Support/RubDuck/RubDuck.settings".
 ThemeKind preferredTheme();
 void setPreferredTheme(ThemeKind kind);
+// Whether the controls show tooltips (on unless turned off in the duck menu).
+bool preferredTooltips();
+void setPreferredTooltips(bool shown);
 
 enum class Face { Ui500, Ui600, Ui700, Vfd, Name500, Name700 };
 

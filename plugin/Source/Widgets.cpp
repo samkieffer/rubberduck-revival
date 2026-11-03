@@ -655,7 +655,7 @@ void PresetVfd::mouseDown(const juce::MouseEvent&)
 DuckBadge::DuckBadge()
 {
     setMouseCursor(juce::MouseCursor::PointingHandCursor);
-    setTooltip("Theme");
+    setTooltip("Theme and tooltips");
 }
 
 void DuckBadge::paint(juce::Graphics& g)

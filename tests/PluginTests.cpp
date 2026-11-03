@@ -1,7 +1,10 @@
 // Headless tests of the plugin processor with a simulated host transport.
 //   RubberDuckPluginTests <installer content folder>
 // With RD_SNAPSHOT_DIR set, the editor tests also save PNG renders of the editor there.
+// With RD_AUDIO_DEVICES set, the standalone app's test runs too (it opens the Mac's audio devices).
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_utils/juce_audio_utils.h>
+#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 
 #include <cmath>
 #include <cstdio>
@@ -614,7 +617,9 @@ int main(int argc, char** argv)
         check(note(0, 0).note == 49 && !isEmpty(1), "CLEAR: undo brings the patterns back");
 
         // Tooltips have rounded corners: the editor must show through them, also
-        // when only the tip's area is repainted (as when it appears).
+        // when only the tip's area is repainted (as when it appears). Shown here
+        // whatever the duck menu's preference.
+        dynamic_cast<RubberDuckEditor*>(editor.get())->setTooltipsShown(true, false);
         juce::TooltipWindow* tips = nullptr;
         for (auto* c : editor->getChildren())
             if (auto* t = dynamic_cast<juce::TooltipWindow*>(c))
@@ -701,6 +706,69 @@ int main(int argc, char** argv)
             for (const auto& st : pattern.steps)
                 empty = empty && st.note == -2 && st.accent == 0 && st.slide == 0;
         check(empty, "new instances start with empty patterns");
+    }
+
+    // 15g. Tooltips can be turned off (duck menu): no tooltip window then.
+    {
+        RubberDuckProcessor p;
+        std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+        auto* view = dynamic_cast<RubberDuckEditor*>(editor.get());
+        auto tipWindows = [&] {
+            int n = 0;
+            for (auto* c : editor->getChildren())
+                n += dynamic_cast<juce::TooltipWindow*>(c) != nullptr ? 1 : 0;
+            return n;
+        };
+        view->setTooltipsShown(false, false);
+        const bool off = !view->areTooltipsShown() && tipWindows() == 0;
+        view->setTooltipsShown(true, false);
+        check(off && view->areTooltipsShown() && tipWindows() == 1, "tooltips: off and on again");
+    }
+
+    // 15f. The standalone app (with RD_AUDIO_DEVICES): it starts as a new
+    //      machine, not the one left at the last quit, and goes back to the
+    //      Mac's output from another device, unless that one is chosen later.
+    if (juce::SystemStats::getEnvironmentVariable("RD_AUDIO_DEVICES", {}).isNotEmpty()) {
+        DemoProcessor last;
+        last.setTempoKnob(81);
+        last.setMachineFile(juce::File("/Users/test/Patterns/Acid_was_my_first_love.h30"));
+        juce::MemoryBlock state;
+        last.getStateInformation(state);
+        juce::PropertySet settings;
+        settings.setValue("filterState", state.toBase64Encoding());
+        juce::StandalonePluginHolder app(&settings, false);
+        auto* p = dynamic_cast<RubberDuckProcessor*>(app.processor.get());
+        bool fresh = p != nullptr && p->getMachineFile() == juce::File()
+                     && p->getTempoKnob() == RubberDuckProcessor::kDefaultTempoKnob;
+        if (p != nullptr)
+            for (const auto& pattern : p->getSequence().patterns)
+                for (const auto& st : pattern.steps)
+                    fresh = fresh && st.note == -2;
+        check(fresh, "standalone app: starts as a new machine");
+
+        auto& devices = app.deviceManager;
+        const auto macOutput = devices.getAudioDeviceSetup().outputDeviceName;  // JUCE's default at launch
+        juce::String other;
+        for (const auto& name : devices.getCurrentDeviceTypeObject()->getDeviceNames(false))
+            if (name != macOutput && other.isEmpty())
+                other = name;
+        auto putOn = [&](const juce::String& name) {
+            auto setup = devices.getAudioDeviceSetup();
+            setup.outputDeviceName = name;
+            devices.setAudioDeviceSetup(setup, true);
+        };
+        if (other.isEmpty()) {
+            std::printf("standalone app: a single output, following not tested\n");
+        } else {
+            putOn(other);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(1200);
+            const bool back = devices.getAudioDeviceSetup().outputDeviceName == macOutput
+                              && devices.getCurrentAudioDevice() != nullptr;
+            putOn(other);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(1200);
+            check(back && devices.getAudioDeviceSetup().outputDeviceName == other,
+                  "standalone app: on the Mac's output, then the one chosen");
+        }
     }
 
     // 15d. The standalone app's own transport: stopped at first, PLAY runs the

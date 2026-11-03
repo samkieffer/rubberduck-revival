@@ -41,6 +41,9 @@ public:
     // that every instance follows.
     void setTheme(rd::ui::ThemeKind kind, bool remember);
     rd::ui::ThemeKind getTheme() const { return themeKind; }
+    // Shows or hides the tooltips; with `remember`, for every instance too.
+    void setTooltipsShown(bool shown, bool remember);
+    bool areTooltipsShown() const { return tooltipWindow != nullptr; }
 
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -90,6 +93,7 @@ private:
     RdLookAndFeel lookAndFeel;
     rd::ui::ThemeKind themeKind = rd::ui::ThemeKind::Dark;
     rd::ui::ThemeKind seenPreference = rd::ui::ThemeKind::Dark;
+    bool seenTooltips = true;
 
     std::vector<std::pair<juce::String, std::unique_ptr<Knob>>> knobs;
     std::vector<std::pair<juce::String, std::unique_ptr<Toggle>>> toggles;
@@ -124,7 +128,7 @@ private:
     VfdReadout entryOctave;
     VfdChoice osc1, osc2;
     StepEditor stepEditor;
-    juce::TooltipWindow tooltipWindow{this, 500};
+    std::unique_ptr<juce::TooltipWindow> tooltipWindow;  // none while they are off
     std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<juce::ParameterAttachment> patternAttachment;
 

@@ -116,6 +116,14 @@ RubberDuckProcessor::RubberDuckProcessor()
     readParameters();
     engine.resetSmoothing();
     blockBuffer.resize(rd::kBlockSize);
+
+    // The standalone app starts as a new machine too, and plays on the Mac's
+    // output (looked at from half a second on, once JUCE has opened it).
+    if (hasOwnTransport()) {
+        standalone::forgetLastState();
+        if (auto* devices = standalone::deviceManager())
+            outputFollower = std::make_unique<standalone::OutputFollower>(*devices);
+    }
 }
 
 bool RubberDuckProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -516,7 +524,10 @@ bool RubberDuckProcessor::isMachineModified() const
 
 juce::String RubberDuckProcessor::machineFingerprint() const
 {
-    const auto bytes = h30Bytes(hasOwnTransport() ? getTempoKnob() : kDefaultTempoKnob);
+    // In a host the tempo is the host's: left out with a fixed knob, the one
+    // the fingerprints of sets saved so far were taken with.
+    constexpr int kHostKnob = 128;
+    const auto bytes = h30Bytes(hasOwnTransport() ? getTempoKnob() : kHostKnob);
     uint64_t hash = 14695981039346656037ull;  // FNV-1a
     for (const auto b : bytes) {
         hash ^= b;

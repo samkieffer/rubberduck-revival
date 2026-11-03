@@ -25,6 +25,7 @@ juce::PropertiesFile::Options settingsOptions()
 
 // -1 until the settings file has been read.
 std::atomic<int> cachedTheme{-1};
+std::atomic<int> cachedTooltips{-1};
 
 } // namespace
 
@@ -186,6 +187,23 @@ void setPreferredTheme(ThemeKind kind)
     cachedTheme.store(static_cast<int>(kind));
     juce::PropertiesFile settings(settingsOptions());
     settings.setValue("theme", kind == ThemeKind::Light ? "light" : "dark");
+    settings.saveIfNeeded();
+}
+
+bool preferredTooltips()
+{
+    if (cachedTooltips.load() < 0) {
+        juce::PropertiesFile settings(settingsOptions());
+        cachedTooltips.store(settings.getBoolValue("tooltips", true) ? 1 : 0);
+    }
+    return cachedTooltips.load() == 1;
+}
+
+void setPreferredTooltips(bool shown)
+{
+    cachedTooltips.store(shown ? 1 : 0);
+    juce::PropertiesFile settings(settingsOptions());
+    settings.setValue("tooltips", shown);
     settings.saveIfNeeded();
 }
 

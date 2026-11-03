@@ -162,7 +162,7 @@ public:
     void paintButton(juce::Graphics&, bool highlighted, bool down) override;
 };
 
-// The tempo of the standalone app in a VFD, "BPM 155.4", set like the
+// The tempo of the standalone app in a VFD, "BPM 120.4", set like the
 // original's tempo knob (0..255 = 60..250 BPM, about 0.75 BPM a step): drag
 // up or down, or scroll.
 class TempoVfd : public juce::Component, public juce::SettableTooltipClient
@@ -203,7 +203,8 @@ private:
     bool modified = false;
 };
 
-// The pixel duck, straight on the chassis; a click opens the theme menu.
+// The pixel duck, straight on the chassis; a click opens the menu of the theme
+// and the tooltips.
 class DuckBadge : public juce::Component, public juce::SettableTooltipClient
 {
 public:

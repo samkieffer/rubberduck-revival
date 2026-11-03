@@ -5,11 +5,14 @@
 
 #include <array>
 #include <atomic>
+#include <memory>
 #include <vector>
 
 #include "rd/Engine.h"
 #include "rd/EngineV1.h"
 #include "rd/H30File.h"
+
+#include "StandaloneApp.h"
 
 // Patterns and song, edited by the UI and copied to the engine on the audio
 // thread under a spin lock.
@@ -76,7 +79,8 @@ public:
     // plays and has no tempo), so it runs its own: started and stopped from
     // the editor, from the start of a bar, at a tempo set like the original's
     // knob (0..255 = 60..250 BPM). Loading a .h30 sets the file's tempo.
-    static constexpr int kDefaultTempoKnob = 128;  // the original's default, 155.4 BPM
+    // 120.4 BPM, the knob's nearest to 120 (the original's default is 128, 155.4 BPM).
+    static constexpr int kDefaultTempoKnob = 81;
     bool hasOwnTransport() const { return wrapperType == wrapperType_Standalone; }
     void setTransportPlaying(bool on) { transportPlaying.store(on); }
     bool isTransportPlaying() const { return transportPlaying.load(); }
@@ -181,6 +185,8 @@ private:
     std::atomic<bool> transportPlaying{false};
     std::atomic<int> tempoKnob{kDefaultTempoKnob};
     double ownPpq = 0.0;  // own transport position, in quarter notes
+    // The standalone app's sound on the Mac's output (none in a host).
+    std::unique_ptr<standalone::OutputFollower> outputFollower;
 
     bool wasPlaying = false;
     bool startPending = false;

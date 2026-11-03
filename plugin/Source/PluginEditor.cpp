@@ -139,8 +139,8 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     themeKind = seenPreference = rd::ui::preferredTheme();
     lookAndFeel.setTheme(rd::ui::Theme::get(themeKind));
     setLookAndFeel(&lookAndFeel);
-    // The tip has rounded corners: let the editor show through them.
-    tooltipWindow.setOpaque(false);
+    seenTooltips = rd::ui::preferredTooltips();
+    setTooltipsShown(seenTooltips, false);
 
     // Big knobs: the ones played live.
     addKnob("cutoff", "Cut Off", true);
@@ -377,17 +377,40 @@ void RubberDuckEditor::setTheme(ThemeKind kind, bool remember)
     repaint();
 }
 
+void RubberDuckEditor::setTooltipsShown(bool shown, bool remember)
+{
+    if (remember) {
+        rd::ui::setPreferredTooltips(shown);
+        seenTooltips = shown;
+    }
+    if (shown == areTooltipsShown())
+        return;
+    if (shown) {
+        tooltipWindow = std::make_unique<juce::TooltipWindow>(this, 500);
+        // The tip has rounded corners: let the editor show through them.
+        tooltipWindow->setOpaque(false);
+    } else {
+        tooltipWindow.reset();
+    }
+}
+
 void RubberDuckEditor::showThemeMenu()
 {
     juce::PopupMenu menu;
     menu.addItem(1, "Dark theme", true, themeKind == ThemeKind::Dark);
     menu.addItem(2, "Light theme", true, themeKind == ThemeKind::Light);
     menu.addSeparator();
+    menu.addItem(4, "Tooltips", true, areTooltipsShown());
+    menu.addSeparator();
     menu.addItem(3, JucePlugin_Name " " JucePlugin_VersionString, false);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&duck),
                        [safe = juce::Component::SafePointer<RubberDuckEditor>(this)](int result) {
-                           if (safe != nullptr && (result == 1 || result == 2))
+                           if (safe == nullptr)
+                               return;
+                           if (result == 1 || result == 2)
                                safe->setTheme(result == 2 ? ThemeKind::Light : ThemeKind::Dark, true);
+                           else if (result == 4)
+                               safe->setTooltipsShown(!safe->areTooltipsShown(), true);
                        });
 }
 
@@ -562,6 +585,10 @@ void RubberDuckEditor::timerCallback()
         // Changed from another instance.
         seenPreference = preference;
         setTheme(preference, false);
+    }
+    if (const auto tooltips = rd::ui::preferredTooltips(); tooltips != seenTooltips) {
+        seenTooltips = tooltips;
+        setTooltipsShown(tooltips, false);
     }
     showMachineFile();
     if (processor.hasOwnTransport()) {
