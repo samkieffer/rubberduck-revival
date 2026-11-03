@@ -231,6 +231,21 @@ int main(int argc, char** argv)
         fresh.getStateInformation(state);
         b.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
         check(kept && b.getMachineFile() == juce::File(), "state round trip keeps the machine state file");
+
+        // Modified: differs from the machine last loaded or saved, also after a state round trip.
+        a.setMachineFile(machine);
+        const bool savedClean = !a.isMachineModified();
+        const float cutoff = a.apvts.getRawParameterValue("cutoff")->load();
+        setParam(a, "cutoff", cutoff < 100.0f ? 200.0f : 50.0f);
+        const bool changed = a.isMachineModified();
+        a.getStateInformation(state);
+        b.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        const bool keptModified = b.isMachineModified();
+        setParam(a, "cutoff", cutoff);
+        a.getStateInformation(state);
+        b.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        check(savedClean && changed && keptModified && !a.isMachineModified() && !b.isMachineModified(),
+              "modified since the machine state file, back when undone, kept in the state");
     }
 
     // 6. .h30 export then import gives back the same machine state.
@@ -768,12 +783,13 @@ int main(int argc, char** argv)
                 if (auto* b = dynamic_cast<juce::TextButton*>(c); b != nullptr && b->getButtonText() == "PLAY")
                     play = b;
             const bool spaceTaken = view->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey));
-            const bool started = p->isTransportPlaying() && play != nullptr && play->getButtonText() == "STOP";
+            const bool started = p->isTransportPlaying() && play != nullptr && play->getToggleState()
+                                 && play->getButtonText() == "PLAY";
             if (play != nullptr)
                 play->triggerClick();
             juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
-            check(spaceTaken && started && !p->isTransportPlaying() && play->getButtonText() == "PLAY",
-                  "standalone: space and PLAY start and stop");
+            check(spaceTaken && started && !p->isTransportPlaying() && !play->getToggleState() && play->getButtonText() == "PLAY",
+                  "standalone: space and PLAY start and stop, PLAY lit while playing");
 
             // In a host, the transport and the space bar are the host's.
             DemoProcessor hosted;
@@ -824,8 +840,9 @@ int main(int argc, char** argv)
                 }
             return seq;
         };
-        struct State { const char* name; float engine, playMode; };
-        const State states[] = {{"v102-single", 0.0f, 0.0f}, {"v102-sequence", 0.0f, 1.0f}, {"v212", 1.0f, 0.0f}};
+        struct State { const char* name; float engine, playMode, source; };
+        const State states[] = {{"v102-single", 0.0f, 0.0f, 0.0f}, {"v102-sequence", 0.0f, 1.0f, 0.0f},
+                                {"v212", 1.0f, 0.0f, 0.0f}, {"v102-midi", 0.0f, 1.0f, 1.0f}};
         int written = 0;
         for (const bool pairs : {false, true})
             for (const auto& state : states) {
@@ -834,6 +851,7 @@ int main(int argc, char** argv)
                 r.setPlayHead(&host);
                 setParam(r, "engine", state.engine);
                 setParam(r, "playmode", state.playMode);
+                setParam(r, "source", state.source);
                 setParam(r, "rangestart", 0.0f);
                 setParam(r, "rangeend", 1.0f);
                 setParam(r, "length32", pairs ? 1.0f : 0.0f);
@@ -867,7 +885,7 @@ int main(int argc, char** argv)
                         written++;
                 }
             }
-        check(written == 12, "editor renders: 2 themes x 16/32 steps x 3 engine states");
+        check(written == 16, "editor renders: 2 themes x 16/32 steps x 4 engine and source states");
     }
 
     // 16. MIDI export of the demo line: pitches as replayed in MIDI mode,

@@ -11,7 +11,7 @@
 
 // A rotary knob with its name and an editable value under it. The value turns
 // acid (dark theme) or ink (light theme) under the mouse; a disabled knob
-// (absent from the selected engine) shows a "2.12 ONLY" badge instead.
+// (absent from the selected engine) shows a "V2 ONLY" badge instead.
 class RdKnob : public juce::Slider
 {
 public:
@@ -29,7 +29,7 @@ private:
     void updateValueBox();
 };
 
-// A rectangular key with an LED left of its text (M, Tweak, Tweet, x2).
+// A rectangular key with an LED left of its text (MOD, Tweak, Tweet, x2).
 class LedKey : public juce::Button
 {
 public:
@@ -54,22 +54,28 @@ private:
     Led led = Led::Off;
 };
 
-// "STEPS 16 [switch] 32", notched into the sequencer frame; toggles length32.
-class StepsSwitch : public juce::Button
+// A two-way switch, on towards the right label: "STEPS 16 [switch] 32" notched
+// into the sequencer frame (length32), "V1 [switch] V2" in the header (engine).
+class SlideSwitch : public juce::Button
 {
 public:
-    StepsSwitch();
+    SlideSwitch(const juce::String& caption, const juce::String& offLabel, const juce::String& onLabel);
     int getIdealWidth() const;
     void paintButton(juce::Graphics&, bool highlighted, bool down) override;
+
+private:
+    juce::String caption, offLabel, onLabel;
 };
 
 // The configuration VFD of the header: segments that each open the menu of a
-// choice parameter ("ENG 1.02 · SINGLE · PATTERNS · NEXT BAR").
+// choice parameter ("PATTERNS · SINGLE · NEXT BAR").
 class VfdSelector : public juce::Component, public juce::TooltipClient
 {
 public:
     void addSegment(juce::AudioProcessorValueTreeState& state, const juce::String& paramId, const juce::String& prefix,
                     const juce::StringArray& labels, const juce::String& tooltip);
+    // A disabled segment is dimmed and opens no menu.
+    void setSegmentEnabled(int index, bool enabled);
     int getIdealWidth() const;
 
     void paint(juce::Graphics&) override;
@@ -86,6 +92,7 @@ private:
         juce::AudioParameterChoice* param = nullptr;
         std::unique_ptr<juce::ParameterAttachment> attachment;
         int index = 0;
+        bool enabled = true;
         juce::Rectangle<float> bounds;
     };
     float segmentWidth(const Segment& s) const;
@@ -145,8 +152,9 @@ private:
     juce::String text;
 };
 
-// The PLAY / STOP key of the standalone app, drawn like a step key: a green
-// light along its top lights up while the sequence plays (the toggle state).
+// The PLAY key of the standalone app, drawn like a step key: it says PLAY in
+// both states, a green light along its top lights up while the sequence plays
+// (the toggle state).
 class PlayKey : public juce::TextButton
 {
 public:
@@ -178,19 +186,21 @@ private:
 };
 
 // The machine state file in a VFD like the configuration's: "PRESET name",
-// cut with an ellipsis when too long, "PRESET —" without a file. The tooltip
-// gives the full path; a click calls onClick (LOAD).
+// cut with an ellipsis when too long, followed by "*" once the machine has
+// changed, "PRESET NOT SAVED" without a file. The tooltip gives the full path;
+// a click calls onClick (LOAD).
 class PresetVfd : public juce::Component, public juce::SettableTooltipClient
 {
 public:
     PresetVfd();
     std::function<void()> onClick;
-    void setFile(const juce::File& newFile);
+    void setFile(const juce::File& newFile, bool isModified);
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override;
 
 private:
     juce::File file;
+    bool modified = false;
 };
 
 // The pixel duck, straight on the chassis; a click opens the theme menu.

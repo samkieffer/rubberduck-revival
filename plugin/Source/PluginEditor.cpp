@@ -21,7 +21,7 @@ constexpr int kRow2Y = 482, kRow2H = 140;
 constexpr int kPatternX = kLeft + 66 + 6;  // first pattern column
 constexpr int kPatternPitch = 34;          // 28 px columns, 6 px apart
 
-const juce::String kRangeTooltip("Engine v1.02, Sequence or Shuffle only");
+const juce::String kRangeTooltip("Engine V1 with the patterns, Sequence or Shuffle only");
 
 juce::Font sectionTitleFont()
 {
@@ -168,23 +168,26 @@ RubberDuckEditor::RubberDuckEditor(RubberDuckProcessor& p)
     };
     tune.updateText();
 
-    addToggle("modification", "M");
+    addToggle("modification", "MOD");
     addToggle("tweak", "TWEAK");
     addToggle("tweet", "TWEET");
     addToggle("osc2double", juce::CharPointer_UTF8("\xc3\x97" "2"), true);
     toggle("modification").setTooltip("Filter modification");
     toggle("osc2double").setTooltip("Osc 2 an octave up");
 
-    config.addSegment(p.apvts, "engine", "ENG ", {"1.02", "2.12"}, "Engine: v1.02 (1997) or v2.12 (2000)");
-    config.addSegment(p.apvts, "playmode", {}, {"SINGLE", "SEQUENCE", "SHUFFLE"}, "Play mode");
+    // The source first: with MIDI notes the other two are not used.
     config.addSegment(p.apvts, "source", {}, {"PATTERNS", "MIDI NOTES"},
                       "Sequencer source: the patterns, or MIDI notes played live");
+    config.addSegment(p.apvts, "playmode", {}, {"SINGLE", "SEQUENCE", "SHUFFLE"}, "Play mode of the patterns");
     config.addSegment(p.apvts, "quantize", {}, {"NEXT BAR", "NEXT STEP", "IMMEDIATE"},
                       "When a new pattern takes over");
     addAndMakeVisible(config);
 
     duck.onClick = [this] { showThemeMenu(); };
     addAndMakeVisible(duck);
+    engineAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.apvts, "engine", engineSwitch);
+    engineSwitch.setTooltip("Engine: V1 is RubDuck 1.02 (1997), V2 is 2.12 (2000)");
+    addAndMakeVisible(engineSwitch);
     preset.onClick = [this] { loadFile(); };
     addAndMakeVisible(preset);
 
@@ -351,6 +354,11 @@ int RubberDuckEditor::playMode() const
     return static_cast<int>(std::lround(processor.apvts.getRawParameterValue("playmode")->load()));
 }
 
+bool RubberDuckEditor::patternsPlay() const
+{
+    return std::lround(processor.apvts.getRawParameterValue("source")->load()) == 0;
+}
+
 int RubberDuckEditor::editorHeight() const
 {
     return kHeight + StepEditor::heightFor(stepEditor.numRows()) - StepEditor::heightFor(1);
@@ -392,10 +400,8 @@ void RubberDuckEditor::disarmClear()
 void RubberDuckEditor::showMachineFile()
 {
     const auto file = processor.getMachineFile();
-    if (file != shownFile) {
-        shownFile = file;
-        preset.setFile(file);
-    }
+    // Without a file there is nothing to compare with.
+    preset.setFile(file, file != juce::File() && processor.isMachineModified());
     // In a host the title bar is the host's; the standalone app's is ours.
     if (processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone)
         return;
@@ -419,9 +425,7 @@ void RubberDuckEditor::togglePlay()
 
 void RubberDuckEditor::showPlaying()
 {
-    const bool playing = processor.isTransportPlaying();
-    playButton.setButtonText(playing ? "STOP" : "PLAY");
-    playButton.setToggleState(playing, juce::dontSendNotification);
+    playButton.setToggleState(processor.isTransportPlaying(), juce::dontSendNotification);
 }
 
 bool RubberDuckEditor::keyPressed(const juce::KeyPress& key)
@@ -512,8 +516,12 @@ void RubberDuckEditor::updateEngineControls()
         knob(id).setEnabled(!v1);
     for (const char* id : {"modification", "tweak", "tweet"})
         toggle(id).setEnabled(!v1);
-    // The range is only played by the v1.02 Sequence and Random modes.
-    range.setActive(v1 && playMode() != 0);
+    // With MIDI notes as the source, the patterns, their mode and change are
+    // not used; the range is only played by the v1.02 Sequence and Random modes.
+    const bool patterns = patternsPlay();
+    config.setSegmentEnabled(1, patterns);
+    config.setSegmentEnabled(2, patterns);
+    range.setActive(v1 && playMode() != 0 && patterns);
     resized();
     repaint();
 }
@@ -567,9 +575,11 @@ void RubberDuckEditor::timerCallback()
     }
     const int engineKind = static_cast<int>(processor.getEngineKind());
     const int mode = playMode();
-    if (engineKind != shownEngine || mode != shownPlayMode) {
+    const int source = patternsPlay() ? 0 : 1;
+    if (engineKind != shownEngine || mode != shownPlayMode || source != shownSource) {
         shownEngine = engineKind;
         shownPlayMode = mode;
+        shownSource = source;
         updateEngineControls();
     }
     const int rows = stepEditor.numRows();
@@ -642,7 +652,7 @@ void RubberDuckEditor::paint(juce::Graphics& g)
     if (rangeOn) {
         g.setColour(t.label);
         g.setFont(rd::ui::font(Face::Ui600, 9.5f, 0.12f));
-        g.drawText(playMode() == 2 ? juce::CharPointer_UTF8("V1.02 \xc2\xb7 SHUFFLE") : juce::CharPointer_UTF8("V1.02 \xc2\xb7 SEQUENCE"),
+        g.drawText(playMode() == 2 ? juce::CharPointer_UTF8("V1 \xc2\xb7 SHUFFLE") : juce::CharPointer_UTF8("V1 \xc2\xb7 SEQUENCE"),
                    rangeCaption.withTrimmedTop(15).withTrimmedRight(-8), juce::Justification::centredLeft, false);
         // A bar under the patterns of the range.
         const int from = static_cast<int>(processor.apvts.getRawParameterValue("rangestart")->load());
@@ -684,16 +694,16 @@ void RubberDuckEditor::resized()
     captions.clear();
     separators.clear();
 
-    // Header: duck, name, preset ... (standalone: tempo) configuration VFD, LOAD, SAVE.
+    // Header: duck, name, engine switch, preset, LOAD, SAVE ... (standalone:
+    // tempo) configuration VFD.
     const int headerCentre = kHeaderY + kHeaderH / 2;
     duck.setBounds(kLeft, headerCentre - 16, 33, 32);
     nameX = duck.getRight() + 14;
-    int right = kRight;
-    for (auto* b : {&saveButton, &loadButton}) {
-        const int w = keyWidth(lookAndFeel, *b, 0, 12);
-        b->setBounds(right - w, headerCentre - 13, w, 26);
-        right -= w + 14;
+    {
+        const int w = engineSwitch.getIdealWidth();
+        engineSwitch.setBounds(nameX + cssWidth(nameFont(), "RUBDUCK") + 12, headerCentre - 10, w, 20);
     }
+    int right = kRight;
     const int configWidth = config.getIdealWidth();
     config.setBounds(right - configWidth, headerCentre - 17, configWidth, 34);
     right = config.getX() - 14;
@@ -702,9 +712,15 @@ void RubberDuckEditor::resized()
         tempo.setBounds(right - tw, headerCentre - 17, tw, 34);
         right = tempo.getX() - 14;
     }
+    // LOAD and SAVE close together, by the preset.
+    for (auto* b : {&saveButton, &loadButton}) {
+        const int w = keyWidth(lookAndFeel, *b, 0, 12);
+        b->setBounds(right - w, headerCentre - 13, w, 26);
+        right -= w + 6;
+    }
     {
-        const int x = nameX + cssWidth(nameFont(), "RUBDUCK") + 18;
-        preset.setBounds(x, headerCentre - 17, std::max(0, right - x), 34);
+        const int x = engineSwitch.getRight() + 14;
+        preset.setBounds(x, headerCentre - 17, std::max(0, right - 8 - x), 34);
     }
 
     // Pattern row: 16 keys, SEQ RANGE, DRAG MIDI.
@@ -717,7 +733,7 @@ void RubberDuckEditor::resized()
         int w = cssWidth(caption, "SEQ RANGE");
         int h = 14;
         if (range.isActive()) {
-            w = std::max(w, cssWidth(rd::ui::font(Face::Ui600, 9.5f, 0.12f), juce::CharPointer_UTF8("V1.02 \xc2\xb7 SEQUENCE")));
+            w = std::max(w, cssWidth(rd::ui::font(Face::Ui600, 9.5f, 0.12f), juce::CharPointer_UTF8("V1 \xc2\xb7 SEQUENCE")));
             h = 27;
         }
         rangeCaption = {x, patternCentre - h / 2, w, h};

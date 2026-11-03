@@ -163,51 +163,57 @@ void PatternKey::paintButton(juce::Graphics& g, bool highlighted, bool down)
 
 // ---------------------------------------------------------------------------
 
-StepsSwitch::StepsSwitch() : juce::Button("Steps")
+SlideSwitch::SlideSwitch(const juce::String& captionText, const juce::String& offText, const juce::String& onText)
+    : juce::Button(captionText.isNotEmpty() ? captionText : offText + "/" + onText),
+      caption(captionText), offLabel(offText), onLabel(onText)
 {
     setClickingTogglesState(true);
     setWantsKeyboardFocus(false);
 }
 
-int StepsSwitch::getIdealWidth() const
+int SlideSwitch::getIdealWidth() const
 {
-    const auto caption = rd::ui::font(Face::Ui700, 11.0f, 0.22f);
+    const auto captionFont = rd::ui::font(Face::Ui700, 11.0f, 0.22f);
     const auto number = rd::ui::font(Face::Ui700, 13.0f);
-    return static_cast<int>(std::ceil(6 + rd::ui::textWidth(caption, "STEPS") + 2 + 6 + rd::ui::textWidth(number, "16")
-                                      + 6 + 36 + 6 + rd::ui::textWidth(number, "32") + 6));
+    float w = 6 + rd::ui::textWidth(number, offLabel) + 6 + 36 + 6 + rd::ui::textWidth(number, onLabel) + 6;
+    if (caption.isNotEmpty())
+        w += rd::ui::textWidth(captionFont, caption) + 2 + 6;
+    return static_cast<int>(std::ceil(w));
 }
 
-void StepsSwitch::paintButton(juce::Graphics& g, bool, bool)
+void SlideSwitch::paintButton(juce::Graphics& g, bool, bool)
 {
     auto* lf = RdLookAndFeel::of(*this);
     if (lf == nullptr)
         return;
     const auto& t = lf->theme();
-    const bool on32 = getToggleState();
+    const bool on = getToggleState();
     auto r = getLocalBounds().toFloat();
     // Notched into the frame: hide the border line behind.
     g.setColour(t.chassis);
     g.fillRect(r);
     r.reduce(6.0f, 0.0f);
 
-    const auto caption = rd::ui::font(Face::Ui700, 11.0f, 0.22f);
+    const auto captionFont = rd::ui::font(Face::Ui700, 11.0f, 0.22f);
     const auto number = rd::ui::font(Face::Ui700, 13.0f);
-    g.setColour(t.label);
-    g.setFont(caption);
-    // Text rects get some slack: drawText drops the glyphs that do not fit.
-    g.drawText("STEPS", r.removeFromLeft(rd::ui::textWidth(caption, "STEPS")).withTrimmedRight(-4.0f),
-               juce::Justification::centredLeft, false);
-    r.removeFromLeft(2.0f + 6.0f);
+    if (caption.isNotEmpty()) {
+        g.setColour(t.label);
+        g.setFont(captionFont);
+        // Text rects get some slack: drawText drops the glyphs that do not fit.
+        g.drawText(caption, r.removeFromLeft(rd::ui::textWidth(captionFont, caption)).withTrimmedRight(-4.0f),
+                   juce::Justification::centredLeft, false);
+        r.removeFromLeft(2.0f + 6.0f);
+    }
     g.setFont(number);
-    g.setColour(on32 ? t.switchThumb : t.ink);
-    g.drawText("16", r.removeFromLeft(rd::ui::textWidth(number, "16")).expanded(3.0f, 0.0f), juce::Justification::centred,
-               false);
+    g.setColour(on ? t.switchThumb : t.ink);
+    g.drawText(offLabel, r.removeFromLeft(rd::ui::textWidth(number, offLabel)).expanded(3.0f, 0.0f),
+               juce::Justification::centred, false);
     r.removeFromLeft(6.0f);
     const auto track = r.removeFromLeft(36.0f).withSizeKeepingCentre(36.0f, 18.0f);
     r.removeFromLeft(6.0f);
-    g.setColour(on32 ? t.ink : t.switchThumb);
-    g.drawText("32", r.removeFromLeft(rd::ui::textWidth(number, "32")).expanded(3.0f, 0.0f), juce::Justification::centred,
-               false);
+    g.setColour(on ? t.ink : t.switchThumb);
+    g.drawText(onLabel, r.removeFromLeft(rd::ui::textWidth(number, onLabel)).expanded(3.0f, 0.0f),
+               juce::Justification::centred, false);
 
     g.setColour(t.switchTrack);
     g.fillRoundedRectangle(track, 3.0f);
@@ -220,7 +226,7 @@ void StepsSwitch::paintButton(juce::Graphics& g, bool, bool)
                                                juce::Colours::transparentBlack, 0.0f, track.getY() + 3.0f, false));
         g.fillRect(track.withHeight(3.0f));
     }
-    const auto thumb = juce::Rectangle<float>(track.getX() + (on32 ? 19.0f : 2.0f), track.getY() + 3.0f, 15.0f, 12.0f);
+    const auto thumb = juce::Rectangle<float>(track.getX() + (on ? 19.0f : 2.0f), track.getY() + 3.0f, 15.0f, 12.0f);
     g.setColour(t.switchThumbHi);
     g.fillRoundedRectangle(thumb, 2.0f);
     g.setColour(t.switchThumb);
@@ -249,6 +255,15 @@ void VfdSelector::addSegment(juce::AudioProcessorValueTreeState& state, const ju
     });
     segments.push_back(std::move(s));
     segment->attachment->sendInitialUpdate();
+}
+
+void VfdSelector::setSegmentEnabled(int index, bool enabled)
+{
+    auto& s = *segments[static_cast<size_t>(index)];
+    if (s.enabled != enabled) {
+        s.enabled = enabled;
+        repaint();
+    }
 }
 
 float VfdSelector::segmentWidth(const Segment& s) const
@@ -292,8 +307,9 @@ void VfdSelector::paint(juce::Graphics& g)
         if (s.prefix.isNotEmpty())
             lf->drawGlowText(g, s.prefix, font, r.removeFromLeft(rd::ui::textWidth(font, s.prefix)),
                              t.acid.withMultipliedAlpha(0.45f), juce::Justification::centredLeft, true);
-        lf->drawGlowText(g, s.labels[juce::jlimit(0, s.labels.size() - 1, s.index)], font, r, t.acid,
-                         juce::Justification::centredLeft, true);
+        lf->drawGlowText(g, s.labels[juce::jlimit(0, s.labels.size() - 1, s.index)], font, r,
+                         s.enabled ? t.acid : t.acid.withMultipliedAlpha(0.22f), juce::Justification::centredLeft,
+                         s.enabled);
         if (i + 1 < segments.size())
             lf->drawGlowText(g, dot, font, {s.bounds.getRight(), s.bounds.getY(), rd::ui::textWidth(font, dot) + 4.0f,
                                             s.bounds.getHeight()},
@@ -304,7 +320,7 @@ void VfdSelector::paint(juce::Graphics& g)
 int VfdSelector::segmentAt(juce::Point<float> p) const
 {
     for (size_t i = 0; i < segments.size(); ++i)
-        if (segments[i]->bounds.expanded(2.0f, 4.0f).contains(p))
+        if (segments[i]->enabled && segments[i]->bounds.expanded(2.0f, 4.0f).contains(p))
             return static_cast<int>(i);
     return -1;
 }
@@ -416,7 +432,7 @@ void RangeVfd::setActive(bool isActive)
     active = isActive;
     setMouseCursor(active ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
     setTooltip(active ? "Patterns played by the Sequence and Shuffle modes: click a number to change it"
-                      : "Engine v1.02, Sequence or Shuffle only");
+                      : "Engine V1 with the patterns, Sequence or Shuffle only");
     repaint();
 }
 
@@ -588,11 +604,13 @@ PresetVfd::PresetVfd()
     setTooltip("Load a machine state (.h30)");
 }
 
-void PresetVfd::setFile(const juce::File& newFile)
+void PresetVfd::setFile(const juce::File& newFile, bool isModified)
 {
-    if (newFile != file) {
+    if (newFile != file || isModified != modified) {
         file = newFile;
-        setTooltip(file == juce::File() ? "Load a machine state (.h30)" : file.getFullPathName());
+        modified = isModified;
+        setTooltip(file == juce::File() ? "Not saved to a file yet; click to load a machine state (.h30)"
+                                        : file.getFullPathName() + (modified ? " (modified)" : ""));
         repaint();
     }
 }
@@ -610,18 +628,20 @@ void PresetVfd::paint(juce::Graphics& g)
     lf->drawGlowText(g, prefix, font, r.removeFromLeft(rd::ui::textWidth(font, prefix)),
                      t.acid.withMultipliedAlpha(0.45f), juce::Justification::centredLeft, true);
     if (file == juce::File()) {
-        lf->drawGlowText(g, juce::CharPointer_UTF8("\xe2\x80\x94"), font, r, t.acid.withMultipliedAlpha(0.3f),
-                         juce::Justification::centredLeft, false);
+        lf->drawGlowText(g, "NOT SAVED", font, r, t.acid, juce::Justification::centredLeft, true);
         return;
     }
+    // The star stays when the name is cut.
+    const juce::String star = modified ? " *" : "";
+    const float room = r.getWidth() - rd::ui::textWidth(font, star);
     auto text = file.getFileNameWithoutExtension();
-    if (rd::ui::textWidth(font, text) > r.getWidth()) {
+    if (rd::ui::textWidth(font, text) > room) {
         const juce::String ellipsis = juce::CharPointer_UTF8("\xe2\x80\xa6");
-        while (text.isNotEmpty() && rd::ui::textWidth(font, text + ellipsis) > r.getWidth())
+        while (text.isNotEmpty() && rd::ui::textWidth(font, text + ellipsis) > room)
             text = text.dropLastCharacters(1);
         text = text.trimEnd() + ellipsis;
     }
-    lf->drawGlowText(g, text, font, r, t.acid, juce::Justification::centredLeft, true);
+    lf->drawGlowText(g, text + star, font, r, t.acid, juce::Justification::centredLeft, true);
 }
 
 void PresetVfd::mouseDown(const juce::MouseEvent&)

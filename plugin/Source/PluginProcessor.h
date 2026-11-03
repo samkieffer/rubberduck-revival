@@ -65,8 +65,12 @@ public:
     bool exportH30(const juce::File& file) const;
     // The machine state file last loaded or saved (none for a new instance);
     // kept in the plugin state, so a reopened project still shows it.
+    // Setting it also takes the machine as it is now as the saved one.
     juce::File getMachineFile() const;
     void setMachineFile(const juce::File& file);
+    // Whether the machine differs from the one last loaded or saved: what SAVE
+    // writes, but the tempo in a host (the host's, not the machine's).
+    bool isMachineModified() const;
 
     // The standalone app has no host transport (JUCE's play head there never
     // plays and has no tempo), so it runs its own: started and stopped from
@@ -104,6 +108,9 @@ private:
     bool hostPosition(int64_t blockHostTime, int64_t bufferStart, double ppqAtBufferStart, double bpm,
                       uint32_t& position) const;
     void handleMidi(const juce::MidiMessage& m);
+    // The .h30 file SAVE writes, and its fingerprint for isMachineModified().
+    std::vector<uint8_t> h30Bytes(int tempoKnobValue) const;
+    juce::String machineFingerprint() const;
     // Pattern the engine should play for the selection `index` at `bar`.
     int patternFor(int index, bool positioned, uint32_t bar) const;
     // Makes the active engine play `index`. At a bar start the v1.02 sequencer
@@ -120,6 +127,7 @@ private:
     SequenceData sequence;
     juce::SpinLock machineFileLock;
     juce::File machineFile;
+    juce::String savedFingerprint;  // of the machine last loaded or saved
     std::atomic<bool> sequenceDirty{true};
     std::atomic<bool> snapSmoothing{true};  // after loading a machine state, as the original does
     std::atomic<bool> loadPending{false};   // a .h30 was loaded: switch to its pattern at once

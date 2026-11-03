@@ -41,7 +41,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RubberDuckProcessor::createL
 
     // Same ranges and defaults as the original v2.12 (see docs/reverse-engineering.md);
     // the v1.02 engine reads the same parameters where it has them.
-    choice("engine", "Engine", {"v1.02 (1997)", "v2.12 (2000)"}, 0);
+    choice("engine", "Engine", {"V1 (1.02, 1997)", "V2 (2.12, 2000)"}, 0);
     knob("cutoff", "Cut Off", 0, 255, 128);
     knob("resonance", "Resonance", 0, 255, 64);
     knob("modulation", "Modulation", 0, 255, 128);
@@ -501,8 +501,28 @@ juce::File RubberDuckProcessor::getMachineFile() const
 
 void RubberDuckProcessor::setMachineFile(const juce::File& file)
 {
+    const auto fingerprint = machineFingerprint();
     const juce::SpinLock::ScopedLockType lock(machineFileLock);
     machineFile = file;
+    savedFingerprint = fingerprint;
+}
+
+bool RubberDuckProcessor::isMachineModified() const
+{
+    const auto fingerprint = machineFingerprint();
+    const juce::SpinLock::ScopedLockType lock(machineFileLock);
+    return fingerprint != savedFingerprint;
+}
+
+juce::String RubberDuckProcessor::machineFingerprint() const
+{
+    const auto bytes = h30Bytes(hasOwnTransport() ? getTempoKnob() : kDefaultTempoKnob);
+    uint64_t hash = 14695981039346656037ull;  // FNV-1a
+    for (const auto b : bytes) {
+        hash ^= b;
+        hash *= 1099511628211ull;
+    }
+    return juce::String::toHexString(static_cast<juce::int64>(hash));
 }
 
 namespace {
@@ -604,9 +624,14 @@ bool RubberDuckProcessor::importH30(const juce::File& file, juce::String& error)
 
 bool RubberDuckProcessor::exportH30(const juce::File& file) const
 {
+    const auto bytes = h30Bytes(hasOwnTransport() ? getTempoKnob() : tempoKnobFor(lastBpm.load()));
+    return file.replaceWithData(bytes.data(), bytes.size());
+}
+
+std::vector<uint8_t> RubberDuckProcessor::h30Bytes(int knob) const
+{
     const SequenceData d = getSequence();
     auto get = [this](const char* id) { return static_cast<int>(std::lround(apvts.getRawParameterValue(id)->load())); };
-    const int knob = hasOwnTransport() ? getTempoKnob() : tempoKnobFor(lastBpm.load());
     rd::H30File h30;
     if (getEngineKind() == EngineKind::V102) {
         // Version 2, the v1.02 format (patterns E and F in RubDuck's block).
@@ -633,8 +658,7 @@ bool RubberDuckProcessor::exportH30(const juce::File& file) const
         Q.delayTime = get("delaytime");
         Q.delayGain = get("delaygain");
         Q.delayFeedback = get("delayfeedback");
-        const auto bytes = h30.serialize(snapshot, knob);
-        return file.replaceWithData(bytes.data(), bytes.size());
+        return h30.serialize(snapshot, knob);
     }
 
     rd::Engine snapshot;
@@ -664,8 +688,7 @@ bool RubberDuckProcessor::exportH30(const juce::File& file) const
     P.delayTime = get("delaytime");
     P.delayGain = get("delaygain");
     P.delayFeedback = get("delayfeedback");
-    const auto bytes = h30.serialize(snapshot, knob);
-    return file.replaceWithData(bytes.data(), bytes.size());
+    return h30.serialize(snapshot, knob);
 }
 
 void RubberDuckProcessor::getStateInformation(juce::MemoryBlock& destData)
@@ -685,8 +708,12 @@ void RubberDuckProcessor::getStateInformation(juce::MemoryBlock& destData)
     const int32_t len = d.songLength;
     seq.append(&len, sizeof len);
     xml->setAttribute("sequence", seq.toBase64Encoding());
-    if (const auto file = getMachineFile(); file != juce::File())
-        xml->setAttribute("machineFile", file.getFullPathName());
+    {
+        const juce::SpinLock::ScopedLockType lock(machineFileLock);
+        if (machineFile != juce::File())
+            xml->setAttribute("machineFile", machineFile.getFullPathName());
+        xml->setAttribute("savedFingerprint", savedFingerprint);
+    }
     xml->setAttribute("tempoKnob", getTempoKnob());
     copyXmlToBinary(*xml, destData);
 }
@@ -699,10 +726,10 @@ void RubberDuckProcessor::setStateInformation(const void* data, int sizeInBytes)
     juce::MemoryBlock seq;
     const bool hasSequence = seq.fromBase64Encoding(xml->getStringAttribute("sequence"));
     xml->removeAttribute("sequence");
-    // A state without a file (older projects, or a new instance's) clears it.
     const auto path = xml->getStringAttribute("machineFile");
+    const auto saved = xml->getStringAttribute("savedFingerprint");
     xml->removeAttribute("machineFile");
-    setMachineFile(juce::File::isAbsolutePath(path) ? juce::File(path) : juce::File());
+    xml->removeAttribute("savedFingerprint");
     setTempoKnob(xml->getIntAttribute("tempoKnob", kDefaultTempoKnob));
     xml->removeAttribute("tempoKnob");
     // Projects saved before the v1.02 engine existed keep sounding as v2.12.
@@ -729,6 +756,14 @@ void RubberDuckProcessor::setStateInformation(const void* data, int sizeInBytes)
         std::memcpy(&len, b, sizeof len);
         d.songLength = std::max(1, std::min(len, rd::kSongLength));
         setSequence(d);
+    }
+
+    // A state without a file (older projects, or a new instance's) clears it;
+    // without a fingerprint (older projects), the machine counts as saved.
+    setMachineFile(juce::File::isAbsolutePath(path) ? juce::File(path) : juce::File());
+    if (saved.isNotEmpty()) {
+        const juce::SpinLock::ScopedLockType lock(machineFileLock);
+        savedFingerprint = saved;
     }
 }
 

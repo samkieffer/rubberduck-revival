@@ -237,7 +237,7 @@ void RdLookAndFeel::drawRotarySlider(juce::Graphics& g, int, int, int, int, floa
 
     if (!on) {
         // The value gives way to a badge: the selected engine has no such control.
-        const juce::String badge("2.12 ONLY");
+        const juce::String badge("V2 ONLY");
         const auto font = rd::ui::font(Face::Ui700, 9.5f, 0.08f);
         const float w = rd::ui::textWidth(font, badge) + 8.0f;
         const auto r = juce::Rectangle<float>(w, 14.0f).withCentre({width * 0.5f, k.valueY() + 7.0f});

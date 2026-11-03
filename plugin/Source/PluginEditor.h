@@ -83,6 +83,7 @@ private:
     void updateEngineControls();
     bool isV1() const { return processor.getEngineKind() == RubberDuckProcessor::EngineKind::V102; }
     int playMode() const;
+    bool patternsPlay() const;  // the source is the patterns, not MIDI notes
     int editorHeight() const;
 
     RubberDuckProcessor& processor;
@@ -93,19 +94,21 @@ private:
     std::vector<std::pair<juce::String, std::unique_ptr<Knob>>> knobs;
     std::vector<std::pair<juce::String, std::unique_ptr<Toggle>>> toggles;
     DuckBadge duck;
+    // Next to the name: RubDuck V1 (1.02) or V2 (2.12).
+    SlideSwitch engineSwitch{{}, "V1", "V2"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> engineAttachment;
     PresetVfd preset;
-    juce::File shownFile;
     VfdSelector config;
     juce::TextButton loadButton{"LOAD"}, saveButton{"SAVE"};
-    // The standalone app's own transport (no host there): PLAY / STOP, also
-    // on the space bar, and the tempo.
+    // The standalone app's own transport (no host there): PLAY, also on the
+    // space bar, and the tempo.
     PlayKey playButton;
     TempoVfd tempo;
     bool focusTaken = false;
     std::array<std::unique_ptr<PatternKey>, rd::kNumPatterns> patternKeys;
     RangeVfd range;
     MidiDragButton midiButton{"DRAG MIDI"};
-    StepsSwitch stepsSwitch;
+    SlideSwitch stepsSwitch{"STEPS", "16", "32"};
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> stepsAttachment;
     // Sequencer tools, acting on the shown pattern (or pair).
     juce::TextButton shiftLeft, shiftRight;
@@ -136,6 +139,7 @@ private:
     int shownPlaying = -1;
     int shownEngine = -1;
     int shownPlayMode = -1;
+    int shownSource = -1;
     int shownRows = -1;
     int shownRange = -1;
     int pendingPattern = -1;  // selected while another pattern plays, not yet in effect
