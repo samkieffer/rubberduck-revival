@@ -3,8 +3,9 @@
 # holding an installer (.pkg) and a read-me:
 #   dist/RubDuck-<version>.dmg
 #
-# The installer puts the AU and the VST3 in /Library/Audio/Plug-Ins and the
-# standalone app in /Applications. Binaries are universal (Apple Silicon and
+# The installer puts the AU and the VST3 in /Library/Audio/Plug-Ins, the
+# standalone app in /Applications and the demo patterns (packaging/Demo
+# Patterns) in /Users/Shared/RubDuck, where LOAD opens first. Binaries are universal (Apple Silicon and
 # Intel) and run on macOS 11 or later. They are only signed ad hoc (no Developer
 # ID yet), so Gatekeeper blocks the installer once: packaging/LISEZ-MOI.txt,
 # copied into the image, explains how to allow it.
@@ -28,10 +29,14 @@ WORK="${DIST_DIR}/work"
 STAGE="${WORK}/stage"
 ARTEFACTS="${BUILD_DIR}/plugin/RubberDuckRevival_artefacts/Release"
 DMG="${DIST_DIR}/RubDuck-${VERSION}.dmg"
+PATTERNS="packaging/Demo Patterns"
+# Where the plugin looks for them (demoPatternsFolder() in PluginEditor.cpp).
+PATTERNS_HOME="/Users/Shared/RubDuck"
 
 # The macOS 27 SDK of the Command Line Tools does not link with Xcode's ld
 # ("unknown architecture arm64e.x1"): build against Xcode's SDK unless SDKROOT
-# is already set.
+# is already set. Passed to CMake too: a build folder configured before an
+# Xcode update remembers an SDK that is gone.
 if [ -z "${SDKROOT:-}" ]; then
     SDKROOT=$(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun --sdk macosx --show-sdk-path)
     export SDKROOT
@@ -47,6 +52,7 @@ cmake -S . -B "$BUILD_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
     -DCMAKE_OSX_DEPLOYMENT_TARGET="$MIN_MACOS" \
+    -DCMAKE_OSX_SYSROOT="$SDKROOT" \
     -DRD_INSTALL_PLUGINS=OFF \
     ${juce_source[@]+"${juce_source[@]}"} >/dev/null
 
@@ -92,7 +98,8 @@ for volume in "/Volumes/${NAME} "*; do
         hdiutil detach "$volume" -force >/dev/null 2>&1 || true
     fi
 done
-rm -rf "$DIST_DIR"
+# Images of other versions in dist/ are kept.
+rm -rf "$WORK" "$DMG"
 mkdir -p "$WORK/packages" "$WORK/resources" "$STAGE"
 
 # pkgbuild on macOS 27 prints "write: Permission denied" a few times although
@@ -121,6 +128,18 @@ make_package() {
 make_package au "$AU" "/Library/Audio/Plug-Ins/Components"
 make_package vst3 "$VST3" "/Library/Audio/Plug-Ins/VST3"
 make_package app "$APP" "/Applications"
+
+# The demo patterns, in a folder everybody can save into (like /Users/Shared
+# itself): the modes below are the installed ones.
+patterns_root="${WORK}/root-patterns"
+mkdir -p "${patterns_root}/Demo Patterns"
+cp "$PATTERNS"/*.h30 "${patterns_root}/Demo Patterns/"
+xattr -cr "$patterns_root"
+chmod 777 "$patterns_root" "${patterns_root}/Demo Patterns"
+chmod 666 "${patterns_root}/Demo Patterns"/*.h30
+pkgbuild_filtered --quiet --root "$patterns_root" --ownership recommended \
+    --identifier "${ID}.patterns" --version "$VERSION" \
+    --install-location "$PATTERNS_HOME" "${WORK}/packages/patterns.pkg"
 
 fill() {
     sed -e "s/@VERSION@/${VERSION}/g" -e "s/@ID@/${ID}/g" "$1" > "$2"

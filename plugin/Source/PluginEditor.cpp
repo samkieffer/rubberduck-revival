@@ -468,12 +468,21 @@ void RubberDuckEditor::selectPattern(int index)
     patternAttachment->setValueAsCompleteGesture(static_cast<float>(index + 1));
 }
 
+// Where the installer puts the demo patterns (PATTERNS_HOME in scripts/make_dmg.sh).
+static juce::File demoPatternsFolder()
+{
+    return juce::File("/Users/Shared/RubDuck/Demo Patterns");
+}
+
 void RubberDuckEditor::loadFile()
 {
-    // Opens in the folder of the current file, if any.
+    // Opens in the folder of the current file, if any; else in the demo
+    // patterns, if the installer put them there.
     const auto current = processor.getMachineFile();
+    const auto demos = demoPatternsFolder();
     chooser = std::make_unique<juce::FileChooser>("Load a machine state",
-                                                  current == juce::File() ? juce::File() : current.getParentDirectory(),
+                                                  current != juce::File() ? current.getParentDirectory()
+                                                  : (demos.isDirectory() ? demos : juce::File()),
                                                   "*.h30;*.H30");
     chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                          [this](const juce::FileChooser& fc) {

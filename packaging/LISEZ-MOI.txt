@@ -35,6 +35,14 @@ Folders »), puis « Rescan ». Le plugin apparaît dans Plug-ins > RubDuck.
 S'il n'apparaît pas, redémarrer le Mac.
 
 
+PATTERNS DE DÉMO
+
+L'installeur copie cinq machines d'exemple (« RubDuck demo 1 » à « 5 ») dans
+  /Users/Shared/RubDuck/Demo Patterns
+Le bouton LOAD de RubDuck s'ouvre dans ce dossier tant qu'aucun fichier n'est chargé.
+On peut y enregistrer les siens, ou ailleurs.
+
+
 EN CAS DE SOUCI
 
 « Le plugin est endommagé » ou Live refuse de le charger : dans le Terminal,
@@ -48,6 +56,7 @@ Supprimer ces trois éléments (le Finder demande le mot de passe) :
   /Library/Audio/Plug-Ins/Components/RubDuck.component
   /Library/Audio/Plug-Ins/VST3/RubDuck.vst3
   /Applications/RubDuck.app
+et, pour les patterns de démo, le dossier /Users/Shared/RubDuck.
 
 Les versions d'avant 1.0 s'appelaient « Rubber Duck Revival » : si l'une d'elles est
 installée, supprimer aussi ses trois éléments (mêmes dossiers, « Rubber Duck Revival »
@@ -62,5 +71,6 @@ macOS 15 and later: double-click the .pkg, click "Done", then open System Settin
 Privacy & Security and click "Open Anyway" next to the blocked package, and enter your
 password. macOS 11 to 14: right-click the .pkg > Open > Open.
 In Ableton Live: Settings > Plug-Ins, enable Audio Units v2 (or the VST3 system folders)
-and rescan. Uninstall by deleting the three items listed above (and those of an older
-"Rubber Duck Revival", the name before 1.0).
+and rescan. Five demo patterns go to /Users/Shared/RubDuck/Demo Patterns, where RubDuck's
+LOAD button opens first. Uninstall by deleting the three items listed above (those of an older
+"Rubber Duck Revival", the name before 1.0, too) and /Users/Shared/RubDuck.

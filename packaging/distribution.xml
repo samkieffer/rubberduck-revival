@@ -14,6 +14,7 @@
         <line choice="au"/>
         <line choice="vst3"/>
         <line choice="app"/>
+        <line choice="patterns"/>
     </choices-outline>
     <choice id="au" title="Audio Unit"
             description="Pour Ableton Live, Logic Pro, GarageBand… Installé dans /Library/Audio/Plug-Ins/Components.">
@@ -28,7 +29,13 @@
         <pkg-ref id="@ID@.app"/>
     </choice>
 
+    <choice id="patterns" title="Patterns de démo"
+            description="Cinq machines d'exemple, dans /Users/Shared/RubDuck/Demo Patterns : le bouton LOAD s'ouvre dans ce dossier.">
+        <pkg-ref id="@ID@.patterns"/>
+    </choice>
+
     <pkg-ref id="@ID@.au" version="@VERSION@" onConclusion="none">au.pkg</pkg-ref>
     <pkg-ref id="@ID@.vst3" version="@VERSION@" onConclusion="none">vst3.pkg</pkg-ref>
     <pkg-ref id="@ID@.app" version="@VERSION@" onConclusion="none">app.pkg</pkg-ref>
+    <pkg-ref id="@ID@.patterns" version="@VERSION@" onConclusion="none">patterns.pkg</pkg-ref>
 </installer-gui-script>

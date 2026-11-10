@@ -23,7 +23,9 @@ original any more).
 ## Conventions
 - Keep `core/` free of JUCE so it can be tested headless on Linux and macOS.
 - Every engine change should be checked against reference renders of the original.
-- Do not commit original d-lusion binaries, graphics or patterns.
+- Do not commit original d-lusion binaries, graphics or patterns. The demo patterns in
+  `packaging/Demo Patterns` are Sam's own, written with RubDuck; the installer puts them in
+  `/Users/Shared/RubDuck/Demo Patterns`, where LOAD opens when no file is loaded.
 
 ## Build & test
 - Engine + tools: `cmake -S . -B build -DRD_BUILD_PLUGIN=OFF && cmake --build build -j && (cd build && ctest)`
