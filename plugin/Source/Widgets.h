@@ -45,9 +45,13 @@ class PatternKey : public juce::Button
 {
 public:
     enum class Led { Off, Playing, Pending };
+    // Room above the LED for its glow, which the component's edge cut off; to
+    // be added on top of the key's bounds. Clicks there go through.
+    static constexpr int kGlowRoom = 7;
     explicit PatternKey(const juce::String& name);
     void setState(bool selected, Led led);
     void paintButton(juce::Graphics&, bool highlighted, bool down) override;
+    bool hitTest(int x, int y) override;
 
 private:
     bool selected = false;

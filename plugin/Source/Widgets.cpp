@@ -121,6 +121,11 @@ void PatternKey::setState(bool isSelected, Led newLed)
     repaint();
 }
 
+bool PatternKey::hitTest(int, int y)
+{
+    return y >= kGlowRoom;
+}
+
 void PatternKey::paintButton(juce::Graphics& g, bool highlighted, bool down)
 {
     auto* lf = RdLookAndFeel::of(*this);
@@ -130,6 +135,7 @@ void PatternKey::paintButton(juce::Graphics& g, bool highlighted, bool down)
     const auto w = static_cast<float>(getWidth());
 
     // LED, 6 px, above the key.
+    g.setOrigin(0, kGlowRoom);
     const juce::Point<float> ledCentre(w * 0.5f, 3.0f);
     if (led == Led::Playing)
         lf->drawLed(g, ledCentre, 6.0f, t.play, true);

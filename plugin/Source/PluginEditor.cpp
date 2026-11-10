@@ -753,7 +753,8 @@ void RubberDuckEditor::resized()
     // Pattern row: 16 keys, SEQ RANGE, DRAG MIDI.
     const int patternCentre = kPatternY + kPatternH / 2;
     for (int i = 0; i < rd::kNumPatterns; ++i)
-        patternKeys[static_cast<size_t>(i)]->setBounds(kPatternX + i * kPatternPitch, kPatternY + 4, 28, 36);
+        patternKeys[static_cast<size_t>(i)]->setBounds(kPatternX + i * kPatternPitch, kPatternY + 4 - PatternKey::kGlowRoom,
+                                                           28, 36 + PatternKey::kGlowRoom);
     {
         const int x = kPatternX + rd::kNumPatterns * kPatternPitch - 6 + 22;
         const auto caption = rd::ui::font(Face::Ui700, 11.0f, 0.2f);
