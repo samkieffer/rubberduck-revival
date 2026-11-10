@@ -10,6 +10,9 @@
 #include <CoreAudio/CoreAudio.h>
 #endif
 
+#include <cmath>
+#include <vector>
+
 namespace standalone {
 
 namespace {
@@ -45,6 +48,47 @@ juce::String systemOutputName()
 #endif
 }
 
+// The rate the output named as JUCE lists it really runs at; 0 when unknown.
+double outputRate(const juce::String& name)
+{
+#if defined(__APPLE__)
+    AudioObjectPropertyAddress address{kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal,
+                                       kAudioObjectPropertyElementMain};
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &address, 0, nullptr, &size) != noErr)
+        return 0.0;
+    std::vector<AudioObjectID> devices(size / sizeof(AudioObjectID));
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, nullptr, &size, devices.data()) != noErr)
+        return 0.0;
+    devices.resize(size / sizeof(AudioObjectID));
+    for (const auto device : devices) {
+        address = {kAudioDevicePropertyStreams, kAudioObjectPropertyScopeOutput, kAudioObjectPropertyElementMain};
+        if (AudioObjectGetPropertyDataSize(device, &address, 0, nullptr, &size) != noErr || size == 0)
+            continue;  // no output
+        address = {kAudioDevicePropertyDeviceNameCFString, kAudioObjectPropertyScopeGlobal,
+                   kAudioObjectPropertyElementMain};
+        CFStringRef deviceName = nullptr;
+        size = sizeof deviceName;
+        if (AudioObjectGetPropertyData(device, &address, 0, nullptr, &size, &deviceName) != noErr
+            || deviceName == nullptr)
+            continue;
+        const bool found = juce::String::fromCFString(deviceName) == name;
+        CFRelease(deviceName);
+        if (!found)
+            continue;
+        address.mSelector = kAudioDevicePropertyNominalSampleRate;
+        Float64 rate = 0.0;
+        size = sizeof rate;
+        if (AudioObjectGetPropertyData(device, &address, 0, nullptr, &size, &rate) != noErr)
+            return 0.0;
+        return rate;
+    }
+#else
+    juce::ignoreUnused(name);
+#endif
+    return 0.0;
+}
+
 } // namespace
 
 juce::AudioDeviceManager* deviceManager()
@@ -72,7 +116,30 @@ OutputFollower::OutputFollower(juce::AudioDeviceManager& m) : manager(m)
     startTimer(500);
 }
 
+double RateCheck::look(const juce::String& device, double believed, double real)
+{
+    if (real <= 0.0 || believed <= 0.0 || std::abs(real - believed) < 0.5) {
+        seenOn.clear();
+        askedOn.clear();
+        return 0.0;
+    }
+    const bool twice = device == seenOn && std::abs(real - seen) < 0.5;
+    seenOn = device;
+    seen = real;
+    if (!twice || (device == askedOn && std::abs(real - asked) < 0.5))
+        return 0.0;
+    askedOn = device;
+    asked = real;
+    return real;
+}
+
 void OutputFollower::timerCallback()
+{
+    followOutput();
+    matchRate();
+}
+
+void OutputFollower::followOutput()
 {
     const auto name = systemOutputName();
     if (name.isEmpty() || name == followed)
@@ -88,6 +155,20 @@ void OutputFollower::timerCallback()
             return;  // try again next time
     }
     followed = name;
+}
+
+void OutputFollower::matchRate()
+{
+    auto* device = manager.getCurrentAudioDevice();
+    if (device == nullptr)
+        return;
+    auto setup = manager.getAudioDeviceSetup();
+    const double rate = rateCheck.look(setup.outputDeviceName, device->getCurrentSampleRate(),
+                                       outputRate(setup.outputDeviceName));
+    if (rate <= 0.0)
+        return;
+    setup.sampleRate = rate;
+    manager.setAudioDeviceSetup(setup, true);
 }
 
 } // namespace standalone

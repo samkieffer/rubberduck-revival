@@ -13,6 +13,7 @@
 #include "../plugin/Source/MidiExport.h"
 #include "../plugin/Source/PluginEditor.h"
 #include "../plugin/Source/PluginProcessor.h"
+#include "../plugin/Source/StandaloneApp.h"
 #include "../plugin/Source/StepEditor.h"
 #include "rd/EngineV1.h"
 #include "rd/Mixing.h"
@@ -769,6 +770,50 @@ int main(int argc, char** argv)
             check(back && devices.getAudioDeviceSetup().outputDeviceName == other,
                   "standalone app: on the Mac's output, then the one chosen");
         }
+    }
+
+    // 15h. The standalone app asks again for the output's real rate when JUCE
+    //      believes another one (a Bluetooth headset in call mode: 16 kHz for
+    //      44.1 kHz asked): seen twice in a row, asked once, again after a change.
+    {
+        standalone::RateCheck c;
+        bool ok = c.look("Headset", 44100, 44100) == 0.0;
+        ok = ok && c.look("Headset", 44100, 16000) == 0.0;       // JUCE may be following
+        ok = ok && c.look("Headset", 44100, 16000) == 16000.0;   // it is not: ask
+        ok = ok && c.look("Headset", 44100, 16000) == 0.0;       // asked, not taken: not again
+        ok = ok && c.look("Headset", 16000, 16000) == 0.0;
+        ok = ok && c.look("Headset", 16000, 44100) == 0.0;
+        ok = ok && c.look("Speakers", 16000, 44100) == 0.0;      // another device: seen once
+        ok = ok && c.look("Speakers", 16000, 44100) == 44100.0;
+        ok = ok && c.look("Speakers", 44100, 0) == 0.0;          // rate unknown
+        ok = ok && c.look("Speakers", 44100, 48000) == 0.0 && c.look("Speakers", 44100, 48000) == 48000.0;
+        check(ok, "standalone app: the output's real rate is asked for again");
+    }
+
+    // 15i. At 16 kHz (that headset in call mode) the standalone app keeps its
+    //      tempo: the same step as at 44.1 kHz after the same time.
+    {
+        auto stepAfter = [](double rate, double seconds, bool& sound) {
+            juce::AudioProcessor::setTypeOfNextNewPlugin(juce::AudioProcessor::wrapperType_Standalone);
+            DemoProcessor p;
+            juce::AudioProcessor::setTypeOfNextNewPlugin(juce::AudioProcessor::wrapperType_Undefined);
+            FakeHost clock;  // `run` takes the rate from it; the standalone has no play head
+            clock.rate = rate;
+            p.setTempoKnob(81);  // 120.4 BPM: a step every 0.1246 s
+            p.prepareToPlay(rate, 256);
+            p.setTransportPlaying(true);
+            const auto out = run(p, clock, seconds, 256);
+            sound = rms(out) > 0.01;
+            for (float x : out)
+                sound = sound && std::isfinite(x);
+            return p.getPlayingStep();
+        };
+        bool sound16 = false, sound44 = false;
+        const int at16 = stepAfter(16000, 3.05, sound16);   // 24.5 steps: step 8 of the second bar
+        const int at44 = stepAfter(44100, 3.05, sound44);
+        if (at16 != 8 || at44 != 8)
+            std::printf("   step %d at 16 kHz, %d at 44.1 kHz\n", at16, at44);
+        check(at16 == 8 && at44 == 8 && sound16 && sound44, "standalone: same tempo at 16 kHz as at 44.1 kHz");
     }
 
     // 15d. The standalone app's own transport: stopped at first, PLAY runs the
